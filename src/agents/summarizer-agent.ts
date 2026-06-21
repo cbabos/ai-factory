@@ -1,5 +1,6 @@
 import type { AgentManifest, SubTask } from "../core/types.js";
 import type { IAgent, ILLMCaller } from "../core/interfaces.js";
+import type { IToolRegistry } from "../tools/interfaces.js";
 import { Agent } from "../core/agent.js";
 
 export class SummarizerAgent extends Agent implements IAgent {
@@ -9,16 +10,18 @@ export class SummarizerAgent extends Agent implements IAgent {
     tags: ["summarization", "synthesis"],
     complexityRange: [1, 5],
     tokenProfile: { min: 200, max: 1500, typical: 600 },
-    preferredModels: ["gpt-4o-mini", "claude-haiku-3-5", "gemini-flash-2.5"],
+    preferredModels: ["qwen"],
     timeoutMs: 30000,
     maxRetries: 1,
   };
 
   readonly llmCaller: ILLMCaller;
+  protected tools?: IToolRegistry;
 
-  constructor(llmCaller: ILLMCaller) {
+  constructor(llmCaller: ILLMCaller, tools?: IToolRegistry) {
     super();
     this.llmCaller = llmCaller;
+    this.tools = tools;
   }
 
   protected buildPrompt(subTask: SubTask): string {
@@ -26,7 +29,7 @@ export class SummarizerAgent extends Agent implements IAgent {
   }
 
   protected buildSystemPrompt(_subTask: SubTask): string {
-    return "You are a summarization agent. Produce concise, accurate summaries. Preserve key facts, omit filler.";
+    return "You are a summarization agent. Produce concise, accurate summaries. Preserve key facts, omit filler. You may list directories or read files if the input references paths.";
   }
 
   protected parseOutput(raw: string, _subTask: SubTask): unknown {

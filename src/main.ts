@@ -26,7 +26,7 @@ import {
 } from "./sensors/index.js";
 
 async function main() {
-  const logger = new ConsoleLogger({ namespace: "AI Factory", level: "info" });
+  const logger = new ConsoleLogger({ namespace: "AI Factory", level: "debug" });
   const config = loadConfig("./factory.config.json");
   const secrets = new EnvSecretsProvider();
   const repository = new SQLiteRepository("./ai-factory.db", "tasks");

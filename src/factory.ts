@@ -394,9 +394,9 @@ export class AIFactory {
   ): Map<string, import("./core/interfaces.js").IAgent> {
     const agents = new Map<string, import("./core/interfaces.js").IAgent>();
     const instances = [
-      new SearchAgent(caller),
-      new AnalysisAgent(caller),
-      new SummarizerAgent(caller),
+      new SearchAgent(caller, tools),
+      new AnalysisAgent(caller, tools),
+      new SummarizerAgent(caller, tools),
       new ExecutorAgent(caller, tools),
       new FileIOAgent(caller, tools),
     ];

@@ -5,7 +5,15 @@ import { PipelineStep } from "./pipeline-step.js";
 
 const MAX_TOOL_ITERATIONS = 5;
 
-function parseToolCalls(content: string): ToolCall[] {
+function tryJsonParse(text: string): Record<string, unknown> | undefined {
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseXmlToolCalls(content: string): ToolCall[] {
   const calls: ToolCall[] = [];
   const regex = /\u003ctool\s+name="([^"]+)"\s*\u003e([\s\S]*?)\u003c\/tool\u003e/g;
   let match: RegExpExecArray | null;
@@ -13,13 +21,62 @@ function parseToolCalls(content: string): ToolCall[] {
   while ((match = regex.exec(content)) !== null) {
     const name = match[1] ?? "unknown";
     const argsText = (match[2] ?? "").trim();
-    let args: Record<string, unknown> = {};
-    try {
-      args = JSON.parse(argsText) as Record<string, unknown>;
-    } catch {
-      args = { raw: argsText };
+    const args = tryJsonParse(argsText) ?? { raw: argsText };
+    calls.push({ id: `xml-${index++}`, name, arguments: args });
+  }
+  return calls;
+}
+
+function parseFunctionCallToolCalls(content: string): ToolCall[] {
+  const calls: ToolCall[] = [];
+  const regex = /\u003cfunction_calls\u003e([\s\S]*?)\u003c\/function_calls\u003e|\u003cfunctions\u003e([\s\S]*?)\u003c\/functions\u003e/g;
+  let wrapperMatch: RegExpExecArray | null;
+  let index = 0;
+  while ((wrapperMatch = regex.exec(content)) !== null) {
+    const inner = (wrapperMatch[1] ?? wrapperMatch[2] ?? "").trim();
+    const invokeRegex = /\u003cinvoke name="([^"]+)"\u003e([\s\S]*?)\u003c\/invoke\u003e|\u003cfunction name="([^"]+)"\u003e([\s\S]*?)\u003c\/function\u003e/g;
+    let invokeMatch: RegExpExecArray | null;
+    while ((invokeMatch = invokeRegex.exec(inner)) !== null) {
+      const name = (invokeMatch[1] ?? invokeMatch[3]) || "unknown";
+      const argsText = (invokeMatch[2] ?? invokeMatch[4] ?? "").trim();
+      const args = tryJsonParse(argsText) ?? { raw: argsText };
+      calls.push({ id: `fn-${index++}`, name, arguments: args });
     }
-    calls.push({ id: `tc-${index++}`, name, arguments: args });
+
+    // Also support bare <function=...>{...}</function> outside wrappers
+    const bareRegex = /\u003cfunction=([^\u003e]+)\u003e([\s\S]*?)\u003c\/function\u003e/g;
+    let bareMatch: RegExpExecArray | null;
+    while ((bareMatch = bareRegex.exec(inner)) !== null) {
+      const name = bareMatch[1] || "unknown";
+      const argsText = (bareMatch[2] ?? "").trim();
+      const args = tryJsonParse(argsText) ?? { raw: argsText };
+      calls.push({ id: `fn-${index++}`, name, arguments: args });
+    }
+  }
+
+  // Support top-level bare function tags too
+  const topLevelRegex = /\u003cfunction=([^\u003e]+)\u003e([\s\S]*?)\u003c\/function\u003e/g;
+  let topMatch: RegExpExecArray | null;
+  while ((topMatch = topLevelRegex.exec(content)) !== null) {
+    const name = topMatch[1] || "unknown";
+    const argsText = (topMatch[2] ?? "").trim();
+    const args = tryJsonParse(argsText) ?? { raw: argsText };
+    calls.push({ id: `fn-${index++}`, name, arguments: args });
+  }
+
+  return calls;
+}
+
+function parseToolCalls(content: string): ToolCall[] {
+  const xml = parseXmlToolCalls(content);
+  const functions = parseFunctionCallToolCalls(content);
+  const seen = new Set<string>();
+  const calls: ToolCall[] = [];
+  for (const call of [...xml, ...functions]) {
+    const key = `${call.name}:${JSON.stringify(call.arguments)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    calls.push(call);
   }
   return calls;
 }
@@ -43,12 +100,14 @@ function buildToolsSystemPrompt(tools?: IToolRegistry): string {
         .join("\n");
       const exampleArgs: Record<string, string> = {};
       for (const p of tool.parameters) {
-        exampleArgs[p.name] = `<${p.type}>`;
+        exampleArgs[p.name] = `\u003c${p.type}\u003e`;
       }
-      return `### ${tool.name}\n${tool.description}\nParameters:\n${params || "(none)"}\n\nUse it like:\n<tool name="${tool.name}"\u003e\n${JSON.stringify(exampleArgs, null, 2)}\n</tool\u003e`;
+      const xmlExample = `\u003ctool name="${tool.name}"\u003e\n${JSON.stringify(exampleArgs, null, 2)}\n\u003c/tool\u003e`;
+      const functionExample = `\u003cfunction=${tool.name}\u003e\n${JSON.stringify(exampleArgs, null, 2)}\n\u003c/function\u003e`;
+      return `### ${tool.name}\n${tool.description}\nParameters:\n${params || "(none)"}\n\nYou can call it using either format:\n${xmlExample}\n\nOR\n${functionExample}`;
     })
     .join("\n\n");
-  return `\n\nYou have access to the following tools:\n\n${defs}\n\nWhen you need to use a tool, output exactly one or more <tool name="..."\u003e...JSON arguments...</tool\u003e blocks. You will then receive the results and can continue.`;
+  return `\n\nYou have access to the following tools. You may call them using either \u003ctool name="..."\u003e...\u003c/tool\u003e or \u003cfunction=...\u003e...\u003c/function\u003e blocks. When you have enough information, provide a final answer with no tool blocks.\n\n${defs}`;
 }
 
 export abstract class Agent
@@ -87,7 +146,7 @@ export abstract class Agent
         const baseSystemPrompt = this.buildSystemPrompt(subTask);
         const toolsPrompt = buildToolsSystemPrompt(this.tools);
         const systemPrompt = toolsPrompt
-          ? `${baseSystemPrompt}${toolsPrompt}\n\nWhen you have enough information to answer, provide a final answer with no tool blocks.`
+          ? `${baseSystemPrompt}${toolsPrompt}`
           : baseSystemPrompt;
 
         let prompt = basePrompt;

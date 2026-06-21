@@ -127,25 +127,30 @@ export class AIFactory {
       throw new Error("No LLM callers configured");
     }
     this.defaultCaller = defaultCaller;
-    this.defaultModel = config.complexity.estimatorModel;
+    this.defaultModel = config.complexity.estimatorModel ?? "";
 
-    this.healthChecker = new HealthChecker(
-      this.buildHealthChecks(this.breakers),
-      30_000,
-    );
-
+    // `agents` and `dispatcher` are rebuilt after initialize() discovers which
+    // models are actually available, so the runtime can fall back to the first
+    // available model when the config does not name one.
     const agents = this.buildAgents(defaultCaller, this.tools);
     this.dispatcher = new Dispatcher(
       this.agentRegistry,
       agents,
       config.dispatch.maxConcurrency,
     );
-    this.aggregator = new Aggregator();
 
+    this.healthChecker = new HealthChecker(
+      this.buildHealthChecks(this.breakers),
+      30_000,
+    );
+
+    this.aggregator = new Aggregator();
     this.taskFactory = new TaskFactory();
     this.prioritizer = new Prioritizer();
     this.taskQueue = new InMemoryTaskQueue();
 
+    // Use the static catalog as a starting point; initialize() will merge in
+    // discovered models and pick a default estimator model if needed.
     this.orchestrator = this.buildOrchestrator(config.models);
   }
 
@@ -184,18 +189,19 @@ export class AIFactory {
       );
     }
 
-    const preferred = discovered.find(
-      (m) => m.provider === "omlx" && /qwen/i.test(m.modelId),
-    ) ?? discovered.find((m) => /qwen/i.test(m.modelId));
-
-    if (preferred) {
-      this.defaultModel = preferred.modelId;
-      this.logger.info(`Selected default model: ${preferred.provider}:${preferred.modelId}`);
-    } else {
-      this.logger.info(`Using configured default model: ${this.defaultModel}`);
+    const mergedCatalog = this.buildMergedCatalog(discovered);
+    const configuredModel = this.config.complexity.estimatorModel
+      ? mergedCatalog.find((m) => m.modelId === this.config.complexity.estimatorModel)
+      : undefined;
+    const fallbackModel = mergedCatalog.length > 0 ? mergedCatalog[0]! : undefined;
+    const chosenEstimator = configuredModel ?? fallbackModel;
+    if (chosenEstimator) {
+      this.defaultModel = chosenEstimator.modelId;
+      if (!this.config.complexity.estimatorModel) {
+        this.logger.info(`No estimator model configured; using first available model ${chosenEstimator.provider}:${chosenEstimator.modelId}`);
+      }
     }
 
-    const mergedCatalog = this.buildMergedCatalog(discovered);
     this.orchestrator = this.buildOrchestrator(mergedCatalog);
   }
 
@@ -254,22 +260,29 @@ export class AIFactory {
     const staticByKey = new Map(
       this.config.models.map((m) => [`${m.provider}:${m.modelId}`, m]),
     );
-    const merged = new Map<string, ModelInfo>(staticByKey);
 
+    // Static config defines authoritative capabilities, cost, and priority.
+    // Preserve that order first.
+    const ordered: ModelInfo[] = [...this.config.models];
+    const added = new Set<string>(staticByKey.keys());
+
+    // Append genuinely new discovered models at the end with conservative
+    // defaults so they do not accidentally outrank configured models.
     for (const d of discovered) {
       const key = `${d.provider}:${d.modelId}`;
-      if (merged.has(key)) continue;
-      merged.set(key, {
+      if (added.has(key)) continue;
+      added.add(key);
+      ordered.push({
         provider: d.provider as Provider,
         modelId: d.modelId,
         maxTokens: 4096,
-        costPer1kInput: 0,
-        costPer1kOutput: 0,
-        capabilities: ["search", "analysis", "summarization", "execution", "code-generation", "file-io", "read-only", "write", "reasoning", "synthesis"],
+        costPer1kInput: 0.001,
+        costPer1kOutput: 0.001,
+        capabilities: ["analysis"],
       });
     }
 
-    return [...merged.values()];
+    return ordered;
   }
 
   private buildOrchestrator(catalog: ModelInfo[]): Orchestrator {
@@ -444,7 +457,7 @@ export class AIFactory {
     }
     this.logger.info(`[Result] delivering result for task ${result.taskId} via ${task.origin.channel} (success=${result.success})`);
     if (this.taskRepository) {
-      await this.taskRepository.saveResult(result.taskId, result, result.success ? "completed" : "failed");
+      await this.taskRepository.saveResult(result.taskId, result, result.success ? "completed" : "failed", result.conversation);
     }
     await responder.respond(result, task);
   }

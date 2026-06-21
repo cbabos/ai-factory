@@ -10,7 +10,6 @@ export class ExecutorAgent extends Agent implements IAgent {
     tags: ["execution", "code-generation", "write"],
     complexityRange: [3, 8],
     tokenProfile: { min: 500, max: 8000, typical: 2000 },
-    preferredModels: ["qwen"],
     timeoutMs: 120000,
     maxRetries: 1,
   };

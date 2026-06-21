@@ -4,6 +4,7 @@ import type {
   TaskResult,
   FinalResult,
   ComplexityScore,
+  ConversationTurn,
 } from "./types.js";
 import type {
   IOrchestrator,
@@ -17,6 +18,13 @@ import type {
   IBudgetTracker,
 } from "./interfaces.js";
 import { PipelineStep, type PipelineContext } from "./pipeline-step.js";
+
+function getErrorConversation(err: unknown): ConversationTurn[] | undefined {
+  if (err instanceof Error && "conversation" in err) {
+    return err.conversation as ConversationTurn[];
+  }
+  return undefined;
+}
 
 export class Orchestrator
   extends PipelineStep<Task, FinalResult>
@@ -68,12 +76,16 @@ export class Orchestrator
 
     const span = this.startSpan("orchestrate");
 
+    const conversation: ConversationTurn[] = [];
+
     try {
-      const score = await this.estimateComplexity(task);
-      const subTasks = await this.decomposeIfNeeded(task, score);
+      const estimation = await this.estimateComplexity(task);
+      conversation.push(...estimation.conversation);
+      const subTasks = await this.decomposeIfNeeded(task, estimation.score);
       const assignedSubTasks = await this.assignModels(subTasks);
       const results = await this.dispatch(assignedSubTasks);
       const final = this.aggregate(task, results);
+      final.conversation = [...conversation, ...(final.conversation ?? [])];
 
       this.emit("task:completed", {
         taskId: task.id,
@@ -86,32 +98,39 @@ export class Orchestrator
       this.ctx!.tracer.endTrace(trace);
       return final;
     } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      const errorConversation = getErrorConversation(err);
+      if (errorConversation) {
+        conversation.push(...errorConversation);
+      }
+
       this.emit("task:failed", {
         taskId: task.id,
-        error: err instanceof Error ? err.message : String(err),
+        error,
       });
 
-      this.endSpan(span!, { success: false, error: String(err) });
+      this.endSpan(span!, { success: false, error });
       this.ctx!.tracer.endTrace(trace);
 
       return {
         taskId: task.id,
-        output: null,
+        output: { error, conversation },
         success: false,
         subResults: [],
         totalTokens: { input: 0, output: 0, total: 0 },
         totalCost: 0,
         totalLatencyMs: 0,
         modelBreakdown: {},
+        conversation,
       };
     }
   }
 
-  private async estimateComplexity(task: Task): Promise<ComplexityScore> {
+  private async estimateComplexity(task: Task): Promise<import("./interfaces.js").EstimationResult> {
     const span = this.startSpan("estimate-complexity");
-    const score = await this.estimator.execute(task);
-    this.endSpan(span!, { score: score.score, confidence: score.confidence });
-    return score;
+    const result = await this.estimator.execute(task);
+    this.endSpan(span!, { score: result.score.score, confidence: result.score.confidence });
+    return result;
   }
 
   private async decomposeIfNeeded(
@@ -134,13 +153,13 @@ export class Orchestrator
     }
 
     const span = this.startSpan("decompose");
-    const subTasks = await this.decomposer.decompose(task, score);
+    const result = await this.decomposer.decompose(task, score);
     this.emit("task:decomposed", {
       taskId: task.id,
-      subTaskCount: subTasks.length,
+      subTaskCount: result.subTasks.length,
     });
-    this.endSpan(span!, { subTaskCount: subTasks.length });
-    return subTasks;
+    this.endSpan(span!, { subTaskCount: result.subTasks.length });
+    return result.subTasks;
   }
 
   private async assignModels(subTasks: SubTask[]): Promise<SubTask[]> {

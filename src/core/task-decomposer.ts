@@ -1,5 +1,5 @@
-import type { Task, ComplexityScore, SubTask, TokenEstimate } from "./types.js";
-import type { ITaskDecomposer, ILLMCaller } from "./interfaces.js";
+import type { Task, ComplexityScore, TokenEstimate, ConversationTurn } from "./types.js";
+import type { ITaskDecomposer, ILLMCaller, LLMCallResult, DecompositionResult } from "./interfaces.js";
 
 interface DecomposedSubTask {
   description: string;
@@ -26,37 +26,57 @@ export class TaskDecomposer implements ITaskDecomposer {
     this.decomposerModel = decomposerModel;
   }
 
-  async decompose(task: Task, score: ComplexityScore): Promise<SubTask[]> {
+  async decompose(task: Task, score: ComplexityScore): Promise<DecompositionResult> {
     const prompt = this.buildPrompt(task, score);
+    const conversation: ConversationTurn[] = [
+      { role: "system", content: SYSTEM_PROMPT, timestamp: Date.now() },
+    ];
 
-    const result = await this.llmCaller.callStructured<DecompositionOutput>(
-      prompt,
-      {
+    try {
+      const result: LLMCallResult = await this.llmCaller.call(prompt, {
         model: this.decomposerModel,
         provider: this.llmCaller.provider,
         systemPrompt: SYSTEM_PROMPT,
         temperature: 0.2,
         maxTokens: 2000,
         responseFormat: "json",
-      },
-      {},
-    );
+      });
+      conversation.push(
+        { role: "user", content: prompt, timestamp: Date.now() },
+        { role: "model", content: result.content, timestamp: Date.now(), metadata: { model: result.model, provider: result.provider } },
+      );
 
-    return result.subTasks.map((st, i) => ({
-      id: `${task.id}-sub-${i}`,
-      parentTaskId: task.id,
-      description: st.description,
-      context: task.context,
-      dependencies: st.dependencies.map((d) => `${task.id}-sub-${d}`),
-      capabilityTags: st.capabilityTags,
-      complexity: {
-        score: Math.max(1, Math.min(10, Math.round(st.complexity.score))),
-        confidence: Math.max(0, Math.min(1, st.complexity.confidence)),
-        reasoning: st.complexity.reasoning,
-        estimatedTokens: this.normalizeEstimate(st.complexity.estimatedTokens),
-      },
-      priority: task.priority,
-    }));
+      const parsed = this.parseStructured(result.content);
+      const subTasks = parsed.subTasks.map((st, i) => ({
+        id: `${task.id}-sub-${i}`,
+        parentTaskId: task.id,
+        description: st.description,
+        context: task.context,
+        dependencies: st.dependencies.map((d) => `${task.id}-sub-${d}`),
+        capabilityTags: st.capabilityTags,
+        complexity: {
+          score: Math.max(1, Math.min(10, Math.round(st.complexity.score))),
+          confidence: Math.max(0, Math.min(1, st.complexity.confidence)),
+          reasoning: st.complexity.reasoning,
+          estimatedTokens: this.normalizeEstimate(st.complexity.estimatedTokens),
+        },
+        priority: task.priority,
+      }));
+
+      return { subTasks, conversation };
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      conversation.push({ role: "tool", content: `Error: ${error}`, timestamp: Date.now(), metadata: { phase: "decomposition" } });
+      throw Object.assign(new Error(error), { conversation });
+    }
+  }
+
+  private parseStructured(content: string): DecompositionOutput {
+    try {
+      return JSON.parse(content) as DecompositionOutput;
+    } catch (err) {
+      throw new Error(`Decomposer returned invalid JSON: ${err instanceof Error ? err.message : String(err)}. Content: ${content.slice(0, 500)}`);
+    }
   }
 
   private buildPrompt(task: Task, score: ComplexityScore): string {

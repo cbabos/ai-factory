@@ -112,6 +112,13 @@ export interface ModelChoice {
 
 // ─── Execution ───────────────────────────────────────────────
 
+export interface ConversationTurn {
+  role: "system" | "user" | "model" | "tool";
+  content: string;
+  timestamp: number;
+  metadata?: Record<string, unknown>;
+}
+
 export interface TaskResult {
   subTaskId: string;
   output: unknown;
@@ -122,6 +129,7 @@ export interface TaskResult {
   modelUsed: ModelChoice;
   latencyMs: number;
   retries: number;
+  conversation?: ConversationTurn[];
 }
 
 export interface TokenUsage {
@@ -139,6 +147,7 @@ export interface FinalResult {
   totalCost: number;
   totalLatencyMs: number;
   modelBreakdown: Record<string, TokenUsage>;
+  conversation?: ConversationTurn[];
 }
 
 // ─── Budget ──────────────────────────────────────────────────
@@ -159,7 +168,7 @@ export interface AgentManifest {
   tags: CapabilityTag[];
   complexityRange: [number, number];
   tokenProfile: TokenProfile;
-  preferredModels: string[];
+  preferredModels?: string[];
   timeoutMs: number;
   maxRetries: number;
 }
@@ -249,7 +258,7 @@ export interface TraceSpan {
 export interface FactoryConfig {
   complexity: {
     decompositionThreshold: number; // score above which to decompose
-    estimatorModel: string;
+    estimatorModel?: string;          // optional: default to first available model
   };
   budget: {
     defaultCap: number;

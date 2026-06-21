@@ -6,3 +6,4 @@ export {
   ListDirectoryTool,
   createFileTools,
 } from "./file-tools.js";
+export { RunShellCommandTool } from "./shell-tool.js";

@@ -30,6 +30,14 @@ function makeResult(taskId: string): FinalResult {
   };
 }
 
+function makeConversation(taskId: string) {
+  return [
+    { role: "system", content: "sys", timestamp: 1 },
+    { role: "user", content: `task ${taskId}`, timestamp: 2 },
+    { role: "model", content: "ok", timestamp: 3 },
+  ] as import("../types.js").ConversationTurn[];
+}
+
 describe("InMemoryTaskRepository", () => {
   it("saves tasks and results", async () => {
     const repo = new InMemoryTaskRepository();
@@ -39,6 +47,24 @@ describe("InMemoryTaskRepository", () => {
     const record = await repo.get("t1");
     expect(record?.status).toBe("completed");
     expect(record?.result?.output).toBe("done");
+  });
+
+  it("saves conversation with result", async () => {
+    const repo = new InMemoryTaskRepository();
+    await repo.saveTask(makeTask("t1"));
+    const conversation = makeConversation("t1");
+    await repo.saveResult("t1", makeResult("t1"), "completed", conversation);
+    const record = await repo.get("t1");
+    expect(record?.conversation).toEqual(conversation);
+  });
+
+  it("saves conversation incrementally", async () => {
+    const repo = new InMemoryTaskRepository();
+    await repo.saveTask(makeTask("t1"));
+    const conversation = makeConversation("t1");
+    await repo.saveConversation("t1", conversation);
+    const record = await repo.get("t1");
+    expect(record?.conversation).toEqual(conversation);
   });
 });
 
@@ -73,6 +99,26 @@ describe("SQLiteTaskRepository", () => {
     await repo.saveTask(makeTask("b"));
     const all = await repo.getAll();
     expect(all.map((r: { id: string }) => r.id)).toEqual(["b", "a"]);
+    repo.close();
+  });
+
+  it("saves conversation with result to sqlite", async () => {
+    const repo = new SQLiteTaskRepository(dbPath, "tasks");
+    await repo.saveTask(makeTask("t3"));
+    const conversation = makeConversation("t3");
+    await repo.saveResult("t3", makeResult("t3"), "completed", conversation);
+    const record = await repo.get("t3");
+    expect(record?.conversation).toEqual(conversation);
+    repo.close();
+  });
+
+  it("saves conversation incrementally to sqlite", async () => {
+    const repo = new SQLiteTaskRepository(dbPath, "tasks");
+    await repo.saveTask(makeTask("t3"));
+    const conversation = makeConversation("t3");
+    await repo.saveConversation("t3", conversation);
+    const record = await repo.get("t3");
+    expect(record?.conversation).toEqual(conversation);
     repo.close();
   });
 });

@@ -3,7 +3,7 @@ import { loadConfig } from "./core/config-loader.js";
 import { EnvSecretsProvider } from "./core/secrets.js";
 import { ConsoleLogger } from "./core/logger.js";
 import { SQLiteTaskRepository } from "./core/sqlite-task-repository.js";
-import { ToolRegistry, createFileTools } from "./tools/index.js";
+import { ToolRegistry, createFileTools, RunShellCommandTool } from "./tools/index.js";
 import { AIFactory } from "./factory.js";
 import {
   EmailAdapter,
@@ -20,7 +20,6 @@ import {
   FileSystemResponder,
 } from "./responders/index.js";
 import {
-  CronSensor,
   WebhookSensor,
   FileWatcherSensor,
 } from "./sensors/index.js";
@@ -33,6 +32,7 @@ async function main() {
   for (const tool of createFileTools()) {
     tools.register(tool);
   }
+  tools.register(new RunShellCommandTool());
   const taskRepository = new SQLiteTaskRepository("./ai-factory.db", "tasks");
   const factory = new AIFactory({ config, secrets, logger, taskRepository, tools });
 
@@ -53,7 +53,7 @@ async function main() {
   factory.registerResponder(new FileSystemResponder());
 
   // Register sensors
-  factory.registerSensor(new CronSensor(60_000, "Periodic status check"));
+  //factory.registerSensor(new CronSensor(60_000, "Periodic status check"));
   factory.registerSensor(new WebhookSensor(3000));
   factory.registerSensor(new FileWatcherSensor("./watched", logger));
 

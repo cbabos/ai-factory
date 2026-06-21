@@ -16,7 +16,7 @@ class TestAgent extends Agent {
     tags: ["test"],
     complexityRange: [1, 10] as [number, number],
     tokenProfile: { min: 10, max: 1000, typical: 100 },
-    preferredModels: ["qwen"],
+    preferredModels: [],
     timeoutMs: 5000,
     maxRetries: 0,
   };
@@ -146,5 +146,44 @@ describe("Agent tool parsing", () => {
     expect(result.success).toBe(true);
     expect(result.output).toEqual({ result: "I do not need tools." });
     expect(caller.call).toHaveBeenCalledTimes(1);
+  });
+
+  it("executes oMLX native call:tool blocks", async () => {
+    const responses = [
+      `call:tool:readFile\n{"path":"foo.txt"}`,
+      "The file contains bar",
+    ];
+    const caller = makeCaller(responses);
+    const agent = new TestAgent(caller, makeRegistry());
+    const result = await agent.execute(makeSubTask());
+    expect(result.success).toBe(true);
+    expect(result.output).toEqual({ result: "The file contains bar" });
+    expect(caller.call).toHaveBeenCalledTimes(2);
+  });
+
+  it("tolerates malformed XML tool blocks with mismatched tags", async () => {
+    const responses = [
+      `<tool name="readFile">\n{"path":"foo.txt"}\n</function>\n<tool>`,
+      "The file contains bar",
+    ];
+    const caller = makeCaller(responses);
+    const agent = new TestAgent(caller, makeRegistry());
+    const result = await agent.execute(makeSubTask());
+    expect(result.success).toBe(true);
+    expect(result.output).toEqual({ result: "The file contains bar" });
+    expect(caller.call).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails when the final answer still contains unexecuted tool-like content", async () => {
+    // The model never provides a clean final answer; it keeps emitting malformed tool blocks.
+    const responses = Array.from({ length: 6 }, () =>
+      `<tool name="readFile">\n{"path":"foo.txt"}\n</function>\n<tool>`,
+    );
+    const caller = makeCaller(responses);
+    const agent = new TestAgent(caller, makeRegistry());
+    const result = await agent.execute(makeSubTask());
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/tool-like block/);
+    expect(caller.call).toHaveBeenCalledTimes(5);
   });
 });

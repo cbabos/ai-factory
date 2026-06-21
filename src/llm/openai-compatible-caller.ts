@@ -24,25 +24,35 @@ export class OpenAICompatibleCaller extends LLMCaller implements ILLMCaller {
     }
     messages.push({ role: "user", content: prompt });
 
-    const response = await this.client.chat.completions.create({
-      model: options.model,
-      messages,
-      temperature: options.temperature,
-      max_tokens: options.maxTokens,
-      stop: options.stopSequences,
-    });
+    try {
+      const response = await this.client.chat.completions.create(
+        {
+          model: options.model,
+          messages,
+          temperature: options.temperature,
+          max_tokens: options.maxTokens,
+          stop: options.stopSequences,
+        },
+        { timeout: 60_000 },
+      );
 
-    const choice = response.choices[0];
-    return {
-      content: choice?.message?.content ?? "",
-      usage: this.buildUsage(
-        response.usage?.prompt_tokens ?? 0,
-        response.usage?.completion_tokens ?? 0,
-      ),
-      model: response.model,
-      provider: this.providerName,
-      latencyMs: Date.now() - startedAt,
-    };
+      const choice = response.choices[0];
+      return {
+        content: choice?.message?.content ?? "",
+        usage: this.buildUsage(
+          response.usage?.prompt_tokens ?? 0,
+          response.usage?.completion_tokens ?? 0,
+        ),
+        model: response.model,
+        provider: this.providerName,
+        latencyMs: Date.now() - startedAt,
+      };
+    } catch (err) {
+      throw this.wrapError(
+        err,
+        `call failed for model ${options.model} at ${this.client.baseURL}`,
+      );
+    }
   }
 
   estimateTokens(prompt: string, _model: string): number {
@@ -50,12 +60,24 @@ export class OpenAICompatibleCaller extends LLMCaller implements ILLMCaller {
   }
 
   async listModels(): Promise<DiscoveredModel[]> {
-    const response = await this.client.models.list();
-    return response.data.map((m) => ({
-      provider: this.providerName,
-      modelId: m.id,
-      ownedBy: m.owned_by,
-    }));
+    try {
+      const response = await this.client.models.list();
+      return response.data.map((m) => ({
+        provider: this.providerName,
+        modelId: m.id,
+        ownedBy: m.owned_by,
+      }));
+    } catch (err) {
+      throw this.wrapError(err, `listModels failed at ${this.client.baseURL}`);
+    }
+  }
+
+  private wrapError(err: unknown, context: string): Error {
+    const base = err instanceof Error ? err.message : String(err);
+    const cause = err instanceof Error ? err : undefined;
+    const wrapped = new Error(`${context}: ${base}`);
+    wrapped.cause = cause;
+    return wrapped;
   }
 }
 

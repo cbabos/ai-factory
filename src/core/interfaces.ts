@@ -2,6 +2,7 @@ import type {
   AgentManifest,
   BudgetState,
   ComplexityScore,
+  ConversationTurn,
   DeliveryReceipt,
   DiscoveredModel,
   FactoryConfig,
@@ -59,12 +60,22 @@ export interface IPrioritizer {
 
 // ─── Complexity Estimator ────────────────────────────────────
 
-export type IComplexityEstimator = IPipelineStep<Task, ComplexityScore>;
+export interface EstimationResult {
+  score: ComplexityScore;
+  conversation: ConversationTurn[];
+}
+
+export type IComplexityEstimator = IPipelineStep<Task, EstimationResult>;
 
 // ─── Task Decomposer ─────────────────────────────────────────
 
+export interface DecompositionResult {
+  subTasks: SubTask[];
+  conversation: ConversationTurn[];
+}
+
 export interface ITaskDecomposer {
-  decompose(task: Task, score: ComplexityScore): Promise<SubTask[]>;
+  decompose(task: Task, score: ComplexityScore): Promise<DecompositionResult>;
 }
 
 // ─── Model Selector ──────────────────────────────────────────

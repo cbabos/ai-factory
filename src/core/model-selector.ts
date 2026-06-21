@@ -12,21 +12,44 @@ export class ModelSelector implements IModelSelector {
     const budgetMap = new Map(budget.map((b) => [b.provider, b]));
     const requiredTags = subTask.capabilityTags;
 
-    const candidates = this.catalog
-      .filter((m) => requiredTags.every((t) => m.capabilities.includes(t)))
-      .map((m) => {
-        const estimatedTokens = subTask.complexity.estimatedTokens;
-        const estimatedCost =
-          (estimatedTokens.expected / 1000) * m.costPer1kInput +
-          (estimatedTokens.expected / 1000) * m.costPer1kOutput;
-        const state = budgetMap.get(m.provider);
-        const affordable = state ? state.remaining >= estimatedCost : false;
-        return { model: m, estimatedCost, affordable };
-      })
+    // Split catalog into configured (static) and discovered models. We treat
+    // models without explicit cost as discovered, because the factory only
+    // assigns conservative defaults to newly discovered models.
+    const isConfigured = (m: ModelInfo): boolean =>
+      m.costPer1kInput !== 0 || m.costPer1kOutput !== 0;
+
+    const configured = this.catalog.filter(isConfigured);
+    const discovered = this.catalog.filter((m) => !isConfigured(m));
+
+    const scoreModel = (m: ModelInfo, index: number) => {
+      const estimatedTokens = subTask.complexity.estimatedTokens;
+      const estimatedCost =
+        (estimatedTokens.expected / 1000) * m.costPer1kInput +
+        (estimatedTokens.expected / 1000) * m.costPer1kOutput;
+      const state = budgetMap.get(m.provider);
+      const affordable = state ? state.remaining >= estimatedCost : false;
+      return { model: m, estimatedCost, affordable, index };
+    };
+
+    const match = (m: ModelInfo): boolean =>
+      requiredTags.every((t) => m.capabilities.includes(t));
+
+    const configuredMatches = configured
+      .map(scoreModel)
+      .filter((c) => match(c.model))
       .sort((a, b) => a.estimatedCost - b.estimatedCost);
 
-    const affordable = candidates.filter((c) => c.affordable);
-    const primary = affordable[0] ?? candidates[0];
+    const discoveredMatches = discovered
+      .map((m, i) => scoreModel(m, i))
+      .filter((c) => match(c.model))
+      .sort((a, b) => a.estimatedCost - b.estimatedCost);
+
+    const scored = configuredMatches.length > 0
+      ? configuredMatches
+      : discoveredMatches;
+
+    const affordable = scored.filter((c) => c.affordable);
+    const primary = affordable[0] ?? scored[0];
 
     if (!primary) {
       throw new Error(

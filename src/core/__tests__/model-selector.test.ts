@@ -49,7 +49,7 @@ function makeBudgetState(provider: string, remaining: number): BudgetState {
 }
 
 describe("ModelSelector", () => {
-  it("selects cheapest model that matches tags", async () => {
+  it("selects cheapest model that matches tags when order is equal", async () => {
     const catalog: ModelInfo[] = [
       makeModel("openai", "gpt-4o", 0.01, 0.03, ["analysis"]),
       makeModel("openai", "gpt-4o-mini", 0.001, 0.003, ["analysis"]),
@@ -110,5 +110,26 @@ describe("ModelSelector", () => {
     expect(choice.modelId).toBe("gpt-4o");
     expect(choice.estimatedCost).toBeGreaterThan(0.5);
     expect(choice.fallback).toBeUndefined();
+  });
+
+  it("prefers configured models over cheaper discovered models", async () => {
+    // Configured model has explicit cost; discovered cheap model has zero cost.
+    const catalog: ModelInfo[] = [
+      makeModel("omlx", "configured-model", 1, 1, ["analysis", "search", "summarization"]),
+      makeModel("omlx", "discovered-qwen", 0, 0, ["analysis", "search", "summarization"]),
+    ];
+    const selector = new ModelSelector(catalog);
+    const choice = await selector.select(makeSubTask(["analysis"], 1000), [makeBudgetState("omlx", 100)]);
+    expect(choice.modelId).toBe("configured-model");
+  });
+
+  it("falls back to discovered model only when no configured model matches", async () => {
+    const catalog: ModelInfo[] = [
+      makeModel("omlx", "configured-model", 0.001, 0.001, ["search"]),
+      makeModel("omlx", "discovered-qwen", 0.001, 0.001, ["analysis"]),
+    ];
+    const selector = new ModelSelector(catalog);
+    const choice = await selector.select(makeSubTask(["analysis"], 1000), [makeBudgetState("omlx", 100)]);
+    expect(choice.modelId).toBe("discovered-qwen");
   });
 });

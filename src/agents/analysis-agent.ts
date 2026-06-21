@@ -10,7 +10,6 @@ export class AnalysisAgent extends Agent implements IAgent {
     tags: ["analysis", "reasoning"],
     complexityRange: [3, 7],
     tokenProfile: { min: 500, max: 4000, typical: 1500 },
-    preferredModels: ["qwen"],
     timeoutMs: 60000,
     maxRetries: 2,
   };

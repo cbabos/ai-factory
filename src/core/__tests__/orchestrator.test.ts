@@ -11,6 +11,7 @@ import type {
   ComplexityScore,
   ModelChoice,
   BudgetState,
+  ConversationTurn,
 } from "../types.js";
 import type {
   IComplexityEstimator,
@@ -18,6 +19,8 @@ import type {
   IModelSelector,
   IDispatcher,
   IAggregator,
+  EstimationResult,
+  DecompositionResult,
 } from "../interfaces.js";
 
 function makeTask(): Task {
@@ -110,14 +113,21 @@ function makeDeps(overrides: {
       modelBreakdown: {},
     } as FinalResult);
 
+  const conversation: ConversationTurn[] = [
+    { role: "system", content: "sys", timestamp: 1 },
+    { role: "user", content: "prompt", timestamp: 2 },
+    { role: "model", content: JSON.stringify(score), timestamp: 3 },
+  ];
+  const estimationResult: EstimationResult = { score, conversation };
+
   const estimator = {
     name: "ComplexityEstimator",
-    execute: vi.fn().mockResolvedValue(score),
+    execute: vi.fn().mockResolvedValue(estimationResult),
     setContext: vi.fn(),
   } as unknown as IComplexityEstimator;
 
   const decomposer: ITaskDecomposer = {
-    decompose: vi.fn().mockResolvedValue(subTasks),
+    decompose: vi.fn().mockResolvedValue({ subTasks, conversation } satisfies DecompositionResult),
   };
 
   const modelSelector = {

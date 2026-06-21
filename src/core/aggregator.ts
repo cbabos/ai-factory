@@ -1,4 +1,4 @@
-import type { Task, TaskResult, FinalResult, TokenUsage } from "./types.js";
+import type { Task, TaskResult, FinalResult, TokenUsage, ConversationTurn } from "./types.js";
 import type { IAggregator } from "./interfaces.js";
 
 export class Aggregator implements IAggregator {
@@ -34,6 +34,10 @@ export class Aggregator implements IAggregator {
       }
     }
 
+    const conversation: ConversationTurn[] = results
+      .flatMap((r) => r.conversation ?? [])
+      .sort((a, b) => a.timestamp - b.timestamp);
+
     return {
       taskId: task.id,
       output: allSucceeded
@@ -45,6 +49,7 @@ export class Aggregator implements IAggregator {
       totalCost,
       totalLatencyMs,
       modelBreakdown,
+      conversation,
     };
   }
 }

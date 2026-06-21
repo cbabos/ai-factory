@@ -2,7 +2,6 @@ import "dotenv/config";
 import { loadConfig } from "./core/config-loader.js";
 import { EnvSecretsProvider } from "./core/secrets.js";
 import { ConsoleLogger } from "./core/logger.js";
-import { SQLiteRepository } from "./core/sqlite-repository.js";
 import { SQLiteTaskRepository } from "./core/sqlite-task-repository.js";
 import { ToolRegistry, createFileTools } from "./tools/index.js";
 import { AIFactory } from "./factory.js";
@@ -30,13 +29,12 @@ async function main() {
   const logger = new ConsoleLogger({ namespace: "AI Factory", level: "debug" });
   const config = loadConfig("./factory.config.json");
   const secrets = new EnvSecretsProvider();
-  const repository = new SQLiteRepository("./ai-factory.db", "tasks");
   const tools = new ToolRegistry();
   for (const tool of createFileTools()) {
     tools.register(tool);
   }
   const taskRepository = new SQLiteTaskRepository("./ai-factory.db", "tasks");
-  const factory = new AIFactory({ config, secrets, logger, repository, taskRepository, tools });
+  const factory = new AIFactory({ config, secrets, logger, taskRepository, tools });
 
   await factory.initialize();
 
@@ -63,7 +61,6 @@ async function main() {
   process.on("SIGINT", async () => {
     logger.info("Shutting down AI Factory...");
     await factory.stop();
-    repository.close();
     taskRepository.close();
     process.exit(0);
   });

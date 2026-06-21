@@ -3,6 +3,7 @@ import { loadConfig } from "./core/config-loader.js";
 import { EnvSecretsProvider } from "./core/secrets.js";
 import { ConsoleLogger } from "./core/logger.js";
 import { SQLiteRepository } from "./core/sqlite-repository.js";
+import { SQLiteTaskRepository } from "./core/sqlite-task-repository.js";
 import { ToolRegistry, createFileTools } from "./tools/index.js";
 import { AIFactory } from "./factory.js";
 import {
@@ -34,7 +35,8 @@ async function main() {
   for (const tool of createFileTools()) {
     tools.register(tool);
   }
-  const factory = new AIFactory({ config, secrets, logger, repository, tools });
+  const taskRepository = new SQLiteTaskRepository("./ai-factory.db", "tasks");
+  const factory = new AIFactory({ config, secrets, logger, repository, taskRepository, tools });
 
   await factory.initialize();
 
@@ -62,6 +64,7 @@ async function main() {
     logger.info("Shutting down AI Factory...");
     await factory.stop();
     repository.close();
+    taskRepository.close();
     process.exit(0);
   });
 

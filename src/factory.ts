@@ -53,6 +53,7 @@ import {
   FileIOAgent,
 } from "./agents/index.js";
 import type { IToolRegistry } from "./tools/interfaces.js";
+import type { ITaskRepository } from "./core/task-repository.js";
 import type { SecretsProvider } from "./core/secrets.js";
 
 export interface AIFactoryOptions {
@@ -61,6 +62,7 @@ export interface AIFactoryOptions {
   callers?: Map<Provider, ILLMCaller>;
   logger?: ILogger;
   repository?: IRepository<{ id: string }>;
+  taskRepository?: ITaskRepository;
   tools?: IToolRegistry;
 }
 
@@ -77,6 +79,7 @@ export class AIFactory {
   private metricsCollector: MetricsCollector;
   private healthChecker: HealthChecker;
   private repository?: IRepository<{ id: string }>;
+  private taskRepository?: ITaskRepository;
 
   private config: FactoryConfig;
   private callers: Map<Provider, ILLMCaller>;
@@ -93,11 +96,12 @@ export class AIFactory {
   private running = false;
 
   constructor(options: AIFactoryOptions) {
-    const { config, secrets, callers: injectedCallers, logger, repository, tools } = options;
+    const { config, secrets, callers: injectedCallers, logger, repository, taskRepository, tools } = options;
 
     this.config = config;
     this.logger = logger ?? new ConsoleLogger({ namespace: "AIFactory", level: "info" });
     this.repository = repository as IRepository<{ id: string }> | undefined;
+    this.taskRepository = taskRepository;
     this.tools = tools;
     this.eventBus = new EventBus(new NoopLogger());
     this.tracer = new Tracer();
@@ -424,6 +428,9 @@ export class AIFactory {
     this.logger.info(`[Signal] ${rawSignal.channel}: ${signal.content.slice(0, 120)}`);
     const task = this.taskFactory.create(signal);
     this.logger.info(`[Task] enqueued task ${task.id} from ${task.origin.channel}`);
+    if (this.taskRepository) {
+      await this.taskRepository.saveTask(task);
+    }
     await this.taskQueue.enqueue(task);
   }
 
@@ -436,6 +443,9 @@ export class AIFactory {
       return;
     }
     this.logger.info(`[Result] delivering result for task ${result.taskId} via ${task.origin.channel} (success=${result.success})`);
+    if (this.taskRepository) {
+      await this.taskRepository.saveResult(result.taskId, result, result.success ? "completed" : "failed");
+    }
     await responder.respond(result, task);
   }
 

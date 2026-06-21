@@ -31,7 +31,7 @@
 | **Outbound** | 5 Responders | 5 (stubs) | 0 | 1 interface | 0 (real transport still missing for email/Slack/webhook) |
 | **Cross-cutting** | 7 | 6 (`EventBus`, `Tracer`, `BudgetTracker`, `AgentRegistry`, `InMemoryRepository`, `SecretsProvider`) | 2 (`Configurable`, `PipelineStep`) | 0 | 0 |
 | **Wiring/Entrypoint** | 3+ | 3 (`AIFactory`, `src/index.ts` barrel, `src/main.ts`) | 0 | 0 | 0 |
-| **Tests** | N | 139 (all components except integration) | 0 | 0 | Integration test |
+| **Tests** | N | 141 (all components + integration) | 0 | 0 | 0 |
 | **Infrastructure** | ~8 concerns | 0 | 0 | 0 | Logging, metrics, rate limiting, health checks, DB persistence, full circuit breaker, input validation |
 
 **What compiles:** All source files pass `tsc --noEmit` with zero errors.
@@ -1941,7 +1941,7 @@ npm install -D vitest
 - [x] `AIFactory` class — `src/factory.ts`
 - [x] `src/index.ts` — barrel export
 - [x] `src/main.ts` — runtime entrypoint
-- [ ] Integration test
+- [x] Integration test — src/__tests__/factory.test.ts
 
 ### Phase 8 — Infrastructure (can be done incrementally)
 
@@ -1957,5 +1957,4 @@ npm install -D vitest
 - [x] `npm install -D vitest`
 - [x] `vitest.config.ts`
 - [x] Unit tests for Phase 1 zero-dependency components (71 tests passing)
-- [x] Unit tests for LLM callers, ModelCatalog, all 5 Agents, Tracer, Responders, Orchestrator dependencies (54 tests passing)
-- [ ] Integration test
+- [x] Unit tests for LLM callers, ModelCatalog, all 5 Agents, Tracer, Responders, Orchestrator dependencies, AIFactory integration (56 tests passing)

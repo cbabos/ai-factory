@@ -45,6 +45,7 @@ import type { SecretsProvider } from "./core/secrets.js";
 export interface AIFactoryOptions {
   config: FactoryConfig;
   secrets: SecretsProvider;
+  callers?: Map<Provider, ILLMCaller>;
 }
 
 export class AIFactory {
@@ -81,7 +82,7 @@ export class AIFactory {
       this.agentRegistry.register(manifest);
     }
 
-    const callers = this.buildCallers(config, secrets);
+    const callers = options.callers ?? this.buildCallers(config, secrets);
     const defaultCaller = callers.values().next().value;
     if (!defaultCaller) {
       throw new Error("No LLM callers configured");

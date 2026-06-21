@@ -22,3 +22,6 @@ export * from "./config-loader.js";
 export * from "./complexity-estimator.js";
 export * from "./task-decomposer.js";
 export * from "./logger.js";
+export * from "./rate-limiter.js";
+export * from "./circuit-breaker.js";
+export * from "./resilient-llm-caller.js";

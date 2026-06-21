@@ -24,6 +24,9 @@ import {
   InMemoryTaskQueue,
   ConsoleLogger,
   NoopLogger,
+  RateLimiter,
+  CircuitBreaker,
+  ResilientLLMCaller,
   type ILogger,
 } from "./core/index.js";
 import {
@@ -186,49 +189,58 @@ export class AIFactory {
   ): Map<Provider, ILLMCaller> {
     const callers = new Map<Provider, ILLMCaller>();
     const configuredProviders = new Set(config.models.map((m) => m.provider));
+    const rateLimiter = new RateLimiter({ maxPerSecond: 10, burstSize: 5 });
+
+    const wrap = (provider: Provider, caller: ILLMCaller): ILLMCaller =>
+      new ResilientLLMCaller(
+        caller,
+        new CircuitBreaker({ failureThreshold: 3, openDurationMs: 30_000 }),
+        provider,
+        rateLimiter,
+      );
 
     if (configuredProviders.has("openai")) {
       const key = secrets.get("OPENAI_API_KEY");
       if (!key) throw new Error("Missing OPENAI_API_KEY");
-      callers.set("openai", new OpenAICaller(key));
+      callers.set("openai", wrap("openai", new OpenAICaller(key)));
     }
 
     if (configuredProviders.has("anthropic")) {
       const key = secrets.get("ANTHROPIC_API_KEY");
       if (!key) throw new Error("Missing ANTHROPIC_API_KEY");
-      callers.set("anthropic", new AnthropicCaller(key));
+      callers.set("anthropic", wrap("anthropic", new AnthropicCaller(key)));
     }
 
     if (configuredProviders.has("ollama")) {
-      callers.set("ollama", createOllamaCaller());
+      callers.set("ollama", wrap("ollama", createOllamaCaller()));
     }
 
     if (configuredProviders.has("omlx")) {
-      callers.set("omlx", createOmlxCaller());
+      callers.set("omlx", wrap("omlx", createOmlxCaller()));
     }
 
     if (configuredProviders.has("mistral")) {
       const key = secrets.get("MISTRAL_API_KEY");
       if (!key) throw new Error("Missing MISTRAL_API_KEY");
-      callers.set("mistral", createMistralCaller(key));
+      callers.set("mistral", wrap("mistral", createMistralCaller(key)));
     }
 
     if (configuredProviders.has("groq")) {
       const key = secrets.get("GROQ_API_KEY");
       if (!key) throw new Error("Missing GROQ_API_KEY");
-      callers.set("groq", createGroqCaller(key));
+      callers.set("groq", wrap("groq", createGroqCaller(key)));
     }
 
     if (configuredProviders.has("deepseek")) {
       const key = secrets.get("DEEPSEEK_API_KEY");
       if (!key) throw new Error("Missing DEEPSEEK_API_KEY");
-      callers.set("deepseek", createDeepseekCaller(key));
+      callers.set("deepseek", wrap("deepseek", createDeepseekCaller(key)));
     }
 
     if (configuredProviders.has("google")) {
       const key = secrets.get("GOOGLE_API_KEY");
       if (!key) throw new Error("Missing GOOGLE_API_KEY");
-      callers.set("google", new GoogleCaller(key));
+      callers.set("google", wrap("google", new GoogleCaller(key)));
     }
 
     return callers;

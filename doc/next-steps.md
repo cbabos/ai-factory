@@ -31,14 +31,14 @@
 | **Outbound** | 5 Responders | 5 (stubs) | 0 | 1 interface | 0 (real transport still missing for email/Slack/webhook) |
 | **Cross-cutting** | 7 | 6 (`EventBus`, `Tracer`, `BudgetTracker`, `AgentRegistry`, `InMemoryRepository`, `SecretsProvider`) | 2 (`Configurable`, `PipelineStep`) | 0 | 0 |
 | **Wiring/Entrypoint** | 3+ | 3 (`AIFactory`, `src/index.ts` barrel, `src/main.ts`) | 0 | 0 | 0 |
-| **Tests** | N | 146 (all components + integration + logger) | 0 | 0 | 0 |
+| **Tests** | N | 155 (all components + integration + Phase 8 logger/rate-limiter/circuit-breaker) | 0 | 0 | 0 |
 | **Infrastructure** | ~8 concerns | 0 | 0 | 0 | Logging, metrics, rate limiting, health checks, DB persistence, full circuit breaker, input validation |
 
 **What compiles:** All source files pass `tsc --noEmit` with zero errors.
 
 **What lints clean:** `npm run lint` passes with `typescript-eslint` and zero errors.
 
-**What tests pass:** `npm test` runs 146 tests across Phase 1–7 core components, adapters, LLM callers, agents, responders, orchestrator dependencies, the end-to-end `AIFactory` integration, and the new `Logger`.
+**What tests pass:** `npm test` runs 155 tests across Phase 1–7 core components, adapters, LLM callers, agents, responders, orchestrator dependencies, the end-to-end `AIFactory` integration, `Logger`, `RateLimiter`, and `CircuitBreaker`.
 
 **What can actually run:** `src/main.ts` can start the full system end-to-end. It loads `factory.config.json`, constructs the `AIFactory`, registers adapters/responders/sensors, and runs the main loop. Real LLM calls require API keys in environment variables. Cron sensor is fully functional; webhook sensor is a stub; email/Slack/webhook responders are stubs. Integration tests in `src/__tests__/factory.test.ts` exercise the cron and webhook paths with a fake LLM caller.
 
@@ -1971,9 +1971,9 @@ npm install -D @types/express @types/imap @types/nodemailer
 ### Phase 8 — Infrastructure (in progress)
 
 - [x] `Logger` + `ConsoleLogger` + `NoopLogger` — `src/core/logger.ts`
+- [x] `RateLimiter` — `src/core/rate-limiter.ts`
+- [x] `CircuitBreaker` + `ResilientLLMCaller` — `src/core/circuit-breaker.ts`, `src/core/resilient-llm-caller.ts`
 - [ ] `MetricsCollector` — `src/core/metrics.ts`
-- [ ] `RateLimiter` — `src/core/rate-limiter.ts`
-- [ ] `CircuitBreaker` — `src/core/circuit-breaker.ts`
 - [ ] `HealthChecker` — `src/core/health.ts`
 - [ ] DB-backed `IRepository` implementation (SQLite/PostgreSQL)
 
@@ -1993,4 +1993,4 @@ npm install -D @types/express @types/imap @types/nodemailer
 - [x] `npm install -D vitest`
 - [x] `vitest.config.ts`
 - [x] Unit tests for Phase 1 zero-dependency components (71 tests passing)
-- [x] Unit tests for LLM callers, ModelCatalog, all 5 Agents, Tracer, Responders, Orchestrator dependencies, AIFactory integration, Logger (75 tests passing)
+- [x] Unit tests for LLM callers, ModelCatalog, all 5 Agents, Tracer, Responders, Orchestrator dependencies, AIFactory integration, Logger, RateLimiter, CircuitBreaker (84 tests passing)

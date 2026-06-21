@@ -7,6 +7,7 @@ import type {
   Task,
   FinalResult,
   Provider,
+  HealthCheck,
 } from "./core/index.js";
 import {
   EventBus,
@@ -27,6 +28,8 @@ import {
   RateLimiter,
   CircuitBreaker,
   ResilientLLMCaller,
+  MetricsCollector,
+  HealthChecker,
   type ILogger,
 } from "./core/index.js";
 import {
@@ -65,6 +68,8 @@ export class AIFactory {
   private prioritizer: Prioritizer;
   private taskQueue: InMemoryTaskQueue;
   private logger: ILogger;
+  private metricsCollector: MetricsCollector;
+  private healthChecker: HealthChecker;
 
   private sensors: ISensor[] = [];
   private adapters = new Map<string, ISignalAdapter>();
@@ -91,11 +96,19 @@ export class AIFactory {
       this.agentRegistry.register(manifest);
     }
 
-    const callers = injectedCallers ?? this.buildCallers(config, secrets);
+    this.metricsCollector = new MetricsCollector(this.eventBus);
+
+    const breakers = new Map<Provider, CircuitBreaker>();
+    const callers = injectedCallers ?? this.buildCallers(config, secrets, breakers);
     const defaultCaller = callers.values().next().value;
     if (!defaultCaller) {
       throw new Error("No LLM callers configured");
     }
+
+    this.healthChecker = new HealthChecker(
+      this.buildHealthChecks(breakers),
+      30_000,
+    );
 
     const agents = this.buildAgents(defaultCaller);
     const dispatcher = new Dispatcher(
@@ -172,6 +185,8 @@ export class AIFactory {
     for (const sensor of this.sensors) {
       sensor.stop();
     }
+    this.healthChecker.destroy();
+    this.metricsCollector.destroy();
     this.budgetTracker.destroy();
   }
 
@@ -183,21 +198,68 @@ export class AIFactory {
     return this.tracer;
   }
 
+  getMetricsCollector(): MetricsCollector {
+    return this.metricsCollector;
+  }
+
+  getHealthChecker(): HealthChecker {
+    return this.healthChecker;
+  }
+
+  private buildHealthChecks(
+    breakers: Map<Provider, CircuitBreaker>,
+  ): HealthCheck[] {
+    return [
+      () => {
+        const states = this.budgetTracker.getAllStates();
+        const exhausted = states.filter((s) => s.remaining <= 0);
+        return {
+          name: "budget",
+          ok: exhausted.length === 0,
+          message:
+            exhausted.length > 0
+              ? `Exhausted providers: ${exhausted.map((s) => s.provider).join(", ")}`
+              : undefined,
+        };
+      },
+      () => {
+        const open = [...breakers.entries()].filter(
+          ([, b]) => b.getState() === "open",
+        );
+        return {
+          name: "circuit-breakers",
+          ok: open.length === 0,
+          message:
+            open.length > 0
+              ? `Open breakers: ${open.map(([p]) => p).join(", ")}`
+              : undefined,
+        };
+      },
+      () => ({
+        name: "event-bus",
+        ok: true,
+        message: `${this.eventBus.listenerCount("task:created")} task:created listeners`,
+      }),
+    ];
+  }
+
   private buildCallers(
     config: FactoryConfig,
     secrets: SecretsProvider,
+    breakers: Map<Provider, CircuitBreaker>,
   ): Map<Provider, ILLMCaller> {
     const callers = new Map<Provider, ILLMCaller>();
     const configuredProviders = new Set(config.models.map((m) => m.provider));
     const rateLimiter = new RateLimiter({ maxPerSecond: 10, burstSize: 5 });
 
-    const wrap = (provider: Provider, caller: ILLMCaller): ILLMCaller =>
-      new ResilientLLMCaller(
-        caller,
-        new CircuitBreaker({ failureThreshold: 3, openDurationMs: 30_000 }),
-        provider,
-        rateLimiter,
-      );
+    const wrap = (provider: Provider, caller: ILLMCaller): ILLMCaller => {
+      const breaker = new CircuitBreaker({
+        failureThreshold: 3,
+        openDurationMs: 30_000,
+      });
+      breakers.set(provider, breaker);
+      return new ResilientLLMCaller(caller, breaker, provider, rateLimiter);
+    };
 
     if (configuredProviders.has("openai")) {
       const key = secrets.get("OPENAI_API_KEY");

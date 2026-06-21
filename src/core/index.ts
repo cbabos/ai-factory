@@ -25,3 +25,5 @@ export * from "./logger.js";
 export * from "./rate-limiter.js";
 export * from "./circuit-breaker.js";
 export * from "./resilient-llm-caller.js";
+export * from "./metrics-collector.js";
+export * from "./health-checker.js";

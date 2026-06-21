@@ -198,6 +198,25 @@ export type EventType =
   | "agent:registered"
   | "agent:unregistered";
 
+export interface MetricSnapshot {
+  tasksCreated: number;
+  tasksCompleted: number;
+  tasksFailed: number;
+  subtasksStarted: number;
+  subtasksCompleted: number;
+  subtasksFailed: number;
+  totalTokens: TokenUsage;
+  totalCost: number;
+  modelUsage: Record<string, number>;
+  budgetThresholds: number;
+  budgetExhaustions: number;
+}
+
+export interface HealthStatus {
+  status: "healthy" | "degraded" | "unhealthy";
+  checks: Record<string, { ok: boolean; message?: string }>;
+}
+
 export interface FactoryEvent {
   type: EventType;
   timestamp: number;

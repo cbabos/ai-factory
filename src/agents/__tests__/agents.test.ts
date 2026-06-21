@@ -197,7 +197,7 @@ describe("ExecutorAgent", () => {
     const agent = new ExecutorAgent(caller);
     await agent.execute(makeSubTask("s1", ["execution"]));
     const prompt = callMock.mock.calls[0]?.[0] as string;
-    expect(prompt).toContain("Generate or execute the following. Be precise and safe.");
+    expect(prompt).toContain("Generate, execute, or implement the following.");
   });
 
   it("parses code output", async () => {

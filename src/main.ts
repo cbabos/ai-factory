@@ -3,6 +3,7 @@ import { loadConfig } from "./core/config-loader.js";
 import { EnvSecretsProvider } from "./core/secrets.js";
 import { ConsoleLogger } from "./core/logger.js";
 import { SQLiteRepository } from "./core/sqlite-repository.js";
+import { ToolRegistry, createFileTools } from "./tools/index.js";
 import { AIFactory } from "./factory.js";
 import {
   EmailAdapter,
@@ -29,7 +30,11 @@ async function main() {
   const config = loadConfig("./factory.config.json");
   const secrets = new EnvSecretsProvider();
   const repository = new SQLiteRepository("./ai-factory.db", "tasks");
-  const factory = new AIFactory({ config, secrets, logger, repository });
+  const tools = new ToolRegistry();
+  for (const tool of createFileTools()) {
+    tools.register(tool);
+  }
+  const factory = new AIFactory({ config, secrets, logger, repository, tools });
 
   await factory.initialize();
 

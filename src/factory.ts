@@ -52,6 +52,7 @@ import {
   ExecutorAgent,
   FileIOAgent,
 } from "./agents/index.js";
+import type { IToolRegistry } from "./tools/interfaces.js";
 import type { SecretsProvider } from "./core/secrets.js";
 
 export interface AIFactoryOptions {
@@ -60,6 +61,7 @@ export interface AIFactoryOptions {
   callers?: Map<Provider, ILLMCaller>;
   logger?: ILogger;
   repository?: IRepository<{ id: string }>;
+  tools?: IToolRegistry;
 }
 
 export class AIFactory {
@@ -83,6 +85,7 @@ export class AIFactory {
   private defaultCaller: ILLMCaller;
   private dispatcher: Dispatcher;
   private aggregator: Aggregator;
+  private tools?: IToolRegistry;
 
   private sensors: ISensor[] = [];
   private adapters = new Map<string, ISignalAdapter>();
@@ -90,11 +93,12 @@ export class AIFactory {
   private running = false;
 
   constructor(options: AIFactoryOptions) {
-    const { config, secrets, callers: injectedCallers, logger, repository } = options;
+    const { config, secrets, callers: injectedCallers, logger, repository, tools } = options;
 
     this.config = config;
     this.logger = logger ?? new ConsoleLogger({ namespace: "AIFactory", level: "info" });
     this.repository = repository as IRepository<{ id: string }> | undefined;
+    this.tools = tools;
     this.eventBus = new EventBus(new NoopLogger());
     this.tracer = new Tracer();
 
@@ -126,7 +130,7 @@ export class AIFactory {
       30_000,
     );
 
-    const agents = this.buildAgents(defaultCaller);
+    const agents = this.buildAgents(defaultCaller, this.tools);
     this.dispatcher = new Dispatcher(
       this.agentRegistry,
       agents,
@@ -384,14 +388,17 @@ export class AIFactory {
     return callers;
   }
 
-  private buildAgents(caller: ILLMCaller): Map<string, import("./core/interfaces.js").IAgent> {
+  private buildAgents(
+    caller: ILLMCaller,
+    tools?: IToolRegistry,
+  ): Map<string, import("./core/interfaces.js").IAgent> {
     const agents = new Map<string, import("./core/interfaces.js").IAgent>();
     const instances = [
       new SearchAgent(caller),
       new AnalysisAgent(caller),
       new SummarizerAgent(caller),
-      new ExecutorAgent(caller),
-      new FileIOAgent(caller),
+      new ExecutorAgent(caller, tools),
+      new FileIOAgent(caller, tools),
     ];
 
     for (const agent of instances) {
@@ -414,9 +421,9 @@ export class AIFactory {
       return;
     }
     const signal = adapter.adapt(rawSignal);
-    this.logger.info();
+    this.logger.info(`[Signal] ${rawSignal.channel}: ${signal.content.slice(0, 120)}`);
     const task = this.taskFactory.create(signal);
-    this.logger.info();
+    this.logger.info(`[Task] enqueued task ${task.id} from ${task.origin.channel}`);
     await this.taskQueue.enqueue(task);
   }
 

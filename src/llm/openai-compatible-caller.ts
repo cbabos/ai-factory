@@ -61,14 +61,16 @@ export class OpenAICompatibleCaller extends LLMCaller implements ILLMCaller {
 
 export function createOllamaCaller(
   baseURL: string = "http://localhost:11434/v1",
+  apiKey: string = "ollama",
 ): OpenAICompatibleCaller {
-  return new OpenAICompatibleCaller(baseURL, "ollama", "ollama");
+  return new OpenAICompatibleCaller(baseURL, apiKey, "ollama");
 }
 
 export function createOmlxCaller(
   baseURL: string = "http://localhost:8000/v1",
+  apiKey: string = "omlx",
 ): OpenAICompatibleCaller {
-  return new OpenAICompatibleCaller(baseURL, "omlx", "omlx");
+  return new OpenAICompatibleCaller(baseURL, apiKey, "omlx");
 }
 
 export function createMistralCaller(apiKey: string): OpenAICompatibleCaller {

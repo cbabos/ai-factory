@@ -350,11 +350,11 @@ export class AIFactory {
     }
 
     if (configuredProviders.has("ollama")) {
-      callers.set("ollama", wrap("ollama", createOllamaCaller()));
+      callers.set("ollama", wrap("ollama", createOllamaCaller(undefined, secrets.get("OLLAMA_API_KEY") ?? "ollama")));
     }
 
     if (configuredProviders.has("omlx")) {
-      callers.set("omlx", wrap("omlx", createOmlxCaller()));
+      callers.set("omlx", wrap("omlx", createOmlxCaller(undefined, secrets.get("OMLX_API_KEY") ?? "omlx")));
     }
 
     if (configuredProviders.has("mistral")) {

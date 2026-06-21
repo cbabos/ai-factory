@@ -27,7 +27,7 @@ npm install
 cp .env.example .env
 ```
 
-The default `factory.config.json` uses a local **oMLX** provider on `http://localhost:8000/v1` and tries to discover a model whose name contains `qwen`. If oMLX is running with a qwen model loaded, no API keys are needed.
+The default `factory.config.json` uses a local **oMLX** provider on `http://localhost:8000/v1` and tries to discover a model whose name contains `qwen`. Set `OMLX_API_KEY` in `.env` if your local server requires authentication (most local servers accept any non-empty value).
 
 To use a cloud provider instead, edit `.env` and `factory.config.json` and add the relevant API keys.
 

@@ -27,3 +27,4 @@ export * from "./circuit-breaker.js";
 export * from "./resilient-llm-caller.js";
 export * from "./metrics-collector.js";
 export * from "./health-checker.js";
+export * from "./sqlite-repository.js";

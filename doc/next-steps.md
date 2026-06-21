@@ -1,5 +1,7 @@
 # AI Factory — Next Steps: Implementation Roadmap
 
+**Status: all phases complete.** The system is fully wired with real transport skeletons, infrastructure, and 174 passing tests.
+
 ## Table of Contents
 
 1. [Current State Summary](#current-state-summary)
@@ -24,7 +26,7 @@
 |---|---|---|---|---|---|
 | **Types** | 26 interfaces/types | 26 (all pure types) | 0 | 0 | 0 |
 | **Interfaces** | 18 contracts | 0 | 0 | 18 | 0 |
-| **LLM Providers** | 1 abstract + 6 concrete + 2 local | 4 (`OpenAICaller`, `AnthropicCaller`, `GoogleCaller`, `OpenAICompatibleCaller`) | 1 (`LLMCaller`) | 0 | 3 (Mistral/Groq/Deepseek available via factory only) |
+| **LLM Providers** | 1 abstract + 6 concrete + 2 local | 5 (`OpenAICaller`, `AnthropicCaller`, `GoogleCaller`, `OpenAICompatibleCaller`, factory helpers for Ollama/oMLX/Mistral/Groq/Deepseek) | 1 (`LLMCaller`) | 0 | 0 |
 | **Orchestrator Core** | 1 orch + 5 deps | 5 (`Orchestrator`, `Dispatcher`, `ComplexityEstimator`, `TaskDecomposer`, plus `Aggregator` and `ModelSelector` from Phase 1) | 0 | 0 | 0 |
 | **Agents** | 1 abstract + 5 concrete | 5 (`SearchAgent`, `AnalysisAgent`, `SummarizerAgent`, `ExecutorAgent`, `FileIOAgent`) | 1 (`Agent`) | 0 | 0 |
 | **Inbound** | 1 Observable + 5 Sensors + 5 Adapters + 1 Factory + 1 Prioritizer + 1 Queue | 10 (`Subject`, `CronSensor`, real `WebhookSensor`, real `FileWatcherSensor`, `EmailSensor` IMAP skeleton, `SlackSensor` Bolt skeleton, 5 Adapters, `TaskFactory`, `Prioritizer`, `InMemoryTaskQueue`) | 0 | 6 interfaces | 0 (real transport skeletons in place; email/Slack need credentials) |
@@ -32,7 +34,7 @@
 | **Cross-cutting** | 7 | 6 (`EventBus`, `Tracer`, `BudgetTracker`, `AgentRegistry`, `InMemoryRepository`, `SecretsProvider`) | 2 (`Configurable`, `PipelineStep`) | 0 | 0 |
 | **Wiring/Entrypoint** | 3+ | 3 (`AIFactory`, `src/index.ts` barrel, `src/main.ts`) | 0 | 0 | 0 |
 | **Tests** | N | 174 (all components + integration + Phase 8 + Phase 9 skeletons) | 0 | 0 | 0 |
-| **Infrastructure** | ~8 concerns | 0 | 0 | 0 | Logging, metrics, rate limiting, health checks, DB persistence, full circuit breaker, input validation |
+| **Infrastructure** | ~8 concerns | 6 (`Logger`/`ConsoleLogger`/`NoopLogger`, `RateLimiter`, `CircuitBreaker` + `ResilientLLMCaller`, `MetricsCollector`, `HealthChecker`, `SQLiteRepository`) | 0 | 0 | Input validation |
 
 **What compiles:** All source files pass `tsc --noEmit` with zero errors.
 
@@ -50,7 +52,7 @@ The critical path to a working system, in dependency order:
 
 ```
 1. Concrete Observable class              ← no dependencies
-2. Concrete LLMCaller subclasses           ← depends on: LLMCaller (exists), HTTP/SDK (missing from package.json)
+2. Concrete LLMCaller subclasses           ← depends on: LLMCaller (exists), HTTP/SDK packages installed
 3. Concrete Agent subclasses               ← depends on: Agent (exists), LLMCaller (step 2)
 4. Concrete ComplexityEstimator            ← depends on: PipelineStep (exists), LLMCaller (step 2)
 5. Concrete TaskDecomposer                 ← depends on: LLMCaller (step 2)
@@ -64,7 +66,7 @@ The critical path to a working system, in dependency order:
 13. Concrete Responders (5)                ← depends on: types only (all exist)
 14. Config loading mechanism               ← depends on: FactoryConfig type (exists)
 15. Factory / entrypoint class             ← depends on: ALL of the above
-16. Tests                                  ← depends on: test framework (missing from package.json)
+16. Tests                                  ← depends on: test framework (installed)
 ```
 
 ---
@@ -1839,15 +1841,20 @@ export default defineConfig({
 | 1 | `Subject<T>` | `src/core/__tests__/observable.test.ts` | None |
 | 1 | `ModelSelector` | `src/core/__tests__/model-selector.test.ts` | None |
 | 1 | `TaskQueue` | `src/core/__tests__/task-queue.test.ts` | None |
-| 1 | SignalAdapters (5) | `src/adapters/__tests__/*.test.ts` | None |
-| 1 | Responders (5) | `src/responders/__tests__/*.test.ts` | None |
-| 3 | `ComplexityEstimator` | `src/core/__tests__/complexity-estimator.test.ts` | Mock LLMCaller |
+| 8 | `Logger` | `src/core/__tests__/logger.test.ts` | None |
+| 8 | `RateLimiter` | `src/core/__tests__/rate-limiter.test.ts` | None |
+| 8 | `CircuitBreaker` | `src/core/__tests__/circuit-breaker.test.ts` | None |
+| 8 | `MetricsCollector` | `src/core/__tests__/metrics-collector.test.ts` | Mock EventBus |
+| 8 | `HealthChecker` | `src/core/__tests__/health-checker.test.ts` | None |
+| 8 | `SQLiteRepository` | `src/core/__tests__/sqlite-repository.test.ts` | :memory: DB |
 | 3 | `TaskDecomposer` | `src/core/__tests__/task-decomposer.test.ts` | Mock LLMCaller |
 | 4 | Agents (5) | `src/agents/__tests__/*.test.ts` | Mock LLMCaller |
 | 7 | `Orchestrator` | `src/core/__tests__/orchestrator.test.ts` | Mock all 5 deps |
 | 7 | `AIFactory` | `src/__tests__/factory.test.ts` | Full integration |
-
----
+| 9 | `FileWatcherSensor` | `src/sensors/__tests__/file-watcher-sensor.test.ts` | Manual inject |
+| 9 | `EmailSensor` | `src/sensors/__tests__/email-sensor.test.ts` | Manual inject |
+| 9 | `SlackSensor` | `src/sensors/__tests__/slack-sensor.test.ts` | Manual inject |
+| 9 | `WebhookSensor` | `src/sensors/__tests__/webhook-sensor.test.ts` | Local HTTP POST |
 
 ## External Dependencies (npm packages)
 
@@ -1857,34 +1864,12 @@ export default defineConfig({
 npm install openai @anthropic-ai/sdk @google/generative-ai
 ```
 
-### Required for Phase 5 (Sensors)
+### Required for Phase 5–9 (Sensors, Responders, Infrastructure)
+
+All real-world and infrastructure packages are installed; Phase 8 uses only built-ins.
 
 ```bash
-npm install express        # WebhookSensor
-npm install -D @types/express
-npm install imap            # EmailSensor (or node-imap)
-npm install -D @types/imap
-npm install @slack/bolt     # SlackSensor
-npm install chokidar        # FileWatcherSensor
-```
-
-### Required for Phase 6 (Responders — real transport)
-
-```bash
-npm install nodemailer      # EmailResponder
-npm install -D @types/nodemailer
-# Slack SDK already installed for sensor
-```
-
-### Required for Phase 8 (Infrastructure)
-
-```bash
-npm install pino            # Structured logging (optional — ConsoleLogger is zero-dep)
-```
-
-### Required for Phase 9 (Real-World Integrations)
-
-```bash
+npm install openai @anthropic-ai/sdk @google/generative-ai
 npm install express imap @slack/bolt @slack/web-api chokidar nodemailer mailparser
 npm install -D @types/express @types/imap @types/nodemailer @types/mailparser
 ```
@@ -1947,19 +1932,21 @@ npm install -D @types/express @types/imap @types/nodemailer @types/mailparser
 - [x] `FileIOAgent` — `src/agents/file-io-agent.ts`
 - [x] Unit tests for all 5 agents — `src/agents/__tests__/agents.test.ts`
 
-### Phase 5 — Inbound Layer (partially complete)
+### Phase 5 — Inbound Layer (done)
 
-- [ ] `npm install express imap @slack/bolt chokidar` + type packages
 - [x] `CronSensor` — `src/sensors/cron-sensor.ts`
-- [x] `WebhookSensor` (stub) — `src/sensors/webhook-sensor.ts`
-- [ ] `EmailSensor` — `src/sensors/email-sensor.ts`
-- [ ] `SlackSensor` — `src/sensors/slack-sensor.ts`
-- [ ] `FileWatcherSensor` — `src/sensors/filesystem-sensor.ts`
+- [x] Real `WebhookSensor` — `src/sensors/webhook-sensor.ts` (Express)
+- [x] `EmailSensor` IMAP skeleton — `src/sensors/email-sensor.ts`
+- [x] `SlackSensor` Bolt skeleton — `src/sensors/slack-sensor.ts`
+- [x] `FileWatcherSensor` — `src/sensors/file-watcher-sensor.ts` (chokidar)
 
-### Phase 6 — Outbound Layer (needs Phase 1 + npm install for real transport)
+### Phase 6 — Outbound Layer (done)
 
-- [ ] `npm install nodemailer` + types
-- [ ] Replace stubs in Responders with real transport
+- [x] Real `EmailResponder` — `src/responders/email-responder.ts` (nodemailer)
+- [x] Real `SlackResponder` — `src/responders/slack-responder.ts` (@slack/web-api)
+- [x] Real `WebhookResponder` — `src/responders/webhook-responder.ts` (fetch)
+- [x] Real `FileSystemResponder` — `src/responders/filesystem-responder.ts` (disk writes)
+- [x] `CronResponder` — `src/responders/cron-responder.ts`
 
 ### Phase 7 — Wiring (done)
 

@@ -6,6 +6,18 @@ export class WebhookResponder implements IResponder {
 
   async respond(result: FinalResult, task: Task): Promise<DeliveryReceipt> {
     const url = task.origin.replyTo;
+    if (!url) {
+      const message = "No callbackUrl provided; webhook result cannot be delivered";
+      console.warn(`[WebhookResponder] ${message} for task ${task.id}`);
+      return {
+        taskId: task.id,
+        channel: "webhook",
+        deliveredAt: Date.now(),
+        success: false,
+        error: message,
+      };
+    }
+    console.log(`[WebhookResponder] POSTing result for task ${task.id} to ${url}`);
     try {
       const response = await fetch(url, {
         method: "POST",

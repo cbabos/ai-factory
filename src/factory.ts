@@ -414,7 +414,9 @@ export class AIFactory {
       return;
     }
     const signal = adapter.adapt(rawSignal);
+    this.logger.info();
     const task = this.taskFactory.create(signal);
+    this.logger.info();
     await this.taskQueue.enqueue(task);
   }
 
@@ -426,6 +428,7 @@ export class AIFactory {
       );
       return;
     }
+    this.logger.info(`[Result] delivering result for task ${result.taskId} via ${task.origin.channel} (success=${result.success})`);
     await responder.respond(result, task);
   }
 

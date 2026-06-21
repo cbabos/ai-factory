@@ -1,7 +1,7 @@
 {
   "complexity": {
     "decompositionThreshold": 5,
-    "estimatorModel": "qwen"
+    "estimatorModel": "Qwen3-Coder-Next-4bit"
   },
   "budget": {
     "defaultCap": 10.0,
@@ -14,7 +14,7 @@
   "models": [
     {
       "provider": "omlx",
-      "modelId": "qwen",
+      "modelId": "Qwen3-Coder-Next-4bit",
       "maxTokens": 32768,
       "costPer1kInput": 0,
       "costPer1kOutput": 0,
@@ -27,7 +27,7 @@
       "tags": ["search", "codebase", "read-only"],
       "complexityRange": [1, 4],
       "tokenProfile": { "min": 200, "max": 2000, "typical": 800 },
-      "preferredModels": ["qwen"],
+      "preferredModels": ["Qwen3-Coder-Next-4bit"],
       "timeoutMs": 30000,
       "maxRetries": 2
     },
@@ -36,7 +36,7 @@
       "tags": ["analysis", "reasoning"],
       "complexityRange": [3, 7],
       "tokenProfile": { "min": 500, "max": 4000, "typical": 1500 },
-      "preferredModels": ["qwen"],
+      "preferredModels": ["Qwen3-Coder-Next-4bit"],
       "timeoutMs": 60000,
       "maxRetries": 2
     },
@@ -45,7 +45,7 @@
       "tags": ["summarization", "synthesis"],
       "complexityRange": [1, 5],
       "tokenProfile": { "min": 200, "max": 1500, "typical": 600 },
-      "preferredModels": ["qwen"],
+      "preferredModels": ["Qwen3-Coder-Next-4bit"],
       "timeoutMs": 30000,
       "maxRetries": 1
     },
@@ -54,7 +54,7 @@
       "tags": ["execution", "code-generation", "write"],
       "complexityRange": [3, 8],
       "tokenProfile": { "min": 500, "max": 8000, "typical": 2000 },
-      "preferredModels": ["qwen"],
+      "preferredModels": ["Qwen3-Coder-Next-4bit"],
       "timeoutMs": 120000,
       "maxRetries": 1
     },
@@ -63,7 +63,7 @@
       "tags": ["file-io", "read-only", "write"],
       "complexityRange": [1, 3],
       "tokenProfile": { "min": 100, "max": 1000, "typical": 400 },
-      "preferredModels": ["qwen"],
+      "preferredModels": ["Qwen3-Coder-Next-4bit"],
       "timeoutMs": 15000,
       "maxRetries": 2
     }

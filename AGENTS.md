@@ -44,9 +44,12 @@ npm run typecheck && npm run lint && npm test
 
 ## Runtime Notes
 
-- Real LLM callers need env vars listed in `src/factory.ts` (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `MISTRAL_API_KEY`, `GROQ_API_KEY`, `DEEPSEEK_API_KEY`).
+- **Runtime loads `.env`.** `src/main.ts` imports `dotenv/config` at the top, so environment variables are read from `.env` automatically.
+- **Copy `.env.example` to `.env`** and fill in real values. `.env` is gitignored.
+- **Real LLM callers need env vars** listed in `src/factory.ts` (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `MISTRAL_API_KEY`, `GROQ_API_KEY`, `DEEPSEEK_API_KEY`).
+- **Real outbound integrations need env vars:** `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS`/`SMTP_FROM` for email; `SLACK_BOT_TOKEN`/`SLACK_SIGNING_SECRET` for Slack.
 - Adapters, responders, and sensors must be registered with `AIFactory` before calling `start()`.
-- `CronSensor` is functional. `WebhookSensor`, email/Slack/file sensors, and all responders are currently stubs that only log to the console.
+- `CronSensor` is functional. Real transport skeletons are in place for webhook, file-system, email, and Slack (email/Slack require valid credentials to reach external services).
 
 ## Docs
 

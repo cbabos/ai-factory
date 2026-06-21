@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { loadConfig } from "./core/config-loader.js";
 import { EnvSecretsProvider } from "./core/secrets.js";
 import { ConsoleLogger } from "./core/logger.js";

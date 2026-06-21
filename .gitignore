@@ -4,3 +4,8 @@ coverage/
 *.log
 .env
 .DS_Store
+
+# Runtime artifacts
+ai-factory.db
+out/
+watched/

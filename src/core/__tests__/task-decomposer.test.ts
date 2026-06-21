@@ -39,6 +39,7 @@ function makeCaller(returnValue: {
   }>;
 }): ILLMCaller {
   return {
+    provider: "openai",
     call: vi.fn(),
     callStructured: vi.fn().mockResolvedValue(returnValue) as ILLMCaller["callStructured"],
     estimateTokens: vi.fn().mockReturnValue(100),

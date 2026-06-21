@@ -1,7 +1,8 @@
-import type { DiscoveredModel, TokenUsage } from "./types.js";
+import type { DiscoveredModel, Provider, TokenUsage } from "./types.js";
 import type { ILLMCaller, LLMCallOptions, LLMCallResult } from "./interfaces.js";
 
 export abstract class LLMCaller implements ILLMCaller {
+  abstract readonly provider: Provider;
   abstract call(prompt: string, options: LLMCallOptions): Promise<LLMCallResult>;
 
   async callStructured<T>(

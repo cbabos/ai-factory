@@ -31,6 +31,8 @@ async function main() {
   const repository = new SQLiteRepository("./ai-factory.db", "tasks");
   const factory = new AIFactory({ config, secrets, logger, repository });
 
+  await factory.initialize();
+
   // Register adapters
   factory.registerAdapter(new EmailAdapter());
   factory.registerAdapter(new SlackAdapter());

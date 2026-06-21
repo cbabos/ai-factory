@@ -32,7 +32,7 @@ export class ComplexityEstimator
       prompt,
       {
         model: this.estimatorModel,
-        provider: "openai", // provider is resolved by the caller instance, not the model string
+        provider: this.llmCaller.provider,
         systemPrompt: SYSTEM_PROMPT,
         temperature: 0.1,
         maxTokens: 600,

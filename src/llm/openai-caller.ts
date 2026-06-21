@@ -4,6 +4,7 @@ import type { ILLMCaller, LLMCallOptions, LLMCallResult } from "../core/interfac
 import { LLMCaller } from "../core/llm-caller.js";
 
 export class OpenAICaller extends LLMCaller implements ILLMCaller {
+  readonly provider = "openai";
   private client: OpenAI;
 
   constructor(apiKey: string) {

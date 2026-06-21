@@ -1,15 +1,19 @@
 import type { ILLMCaller, LLMCallOptions, LLMCallResult } from "./interfaces.js";
-import type { DiscoveredModel } from "./types.js";
+import type { DiscoveredModel, Provider } from "./types.js";
 import type { ICircuitBreaker } from "./circuit-breaker.js";
 import type { IRateLimiter } from "./rate-limiter.js";
 
 export class ResilientLLMCaller implements ILLMCaller {
+  readonly provider: Provider;
+
   constructor(
     private readonly inner: ILLMCaller,
     private readonly breaker: ICircuitBreaker,
     private readonly key: string,
     private readonly rateLimiter?: IRateLimiter,
-  ) {}
+  ) {
+    this.provider = inner.provider;
+  }
 
   async call(prompt: string, options: LLMCallOptions): Promise<LLMCallResult> {
     await this.rateLimiter?.wait(this.key);

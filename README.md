@@ -11,6 +11,8 @@ A lightweight, pluggable AI pipeline system. It captures signals from external s
 
 The whole system is wired together by `AIFactory` (`src/factory.ts`).
 
+At startup `main.ts` calls `await factory.initialize()`, which queries each configured LLM caller for its available models. The first discovered oMLX model matching `qwen` is chosen as the default; otherwise the model named in `factory.config.json` is used.
+
 ## Quick start
 
 ### 1. Install dependencies
@@ -25,7 +27,9 @@ npm install
 cp .env.example .env
 ```
 
-Edit `.env` and add real API keys for the providers you use in `factory.config.json`.
+The default `factory.config.json` uses a local **oMLX** provider on `http://localhost:8000/v1` and tries to discover a model whose name contains `qwen`. If oMLX is running with a qwen model loaded, no API keys are needed.
+
+To use a cloud provider instead, edit `.env` and `factory.config.json` and add the relevant API keys.
 
 ### 3. Build
 

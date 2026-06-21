@@ -49,6 +49,7 @@ function makeMockCaller(result: Partial<LLMCallResult> = {}): CallerMock {
   });
   return {
     caller: {
+      provider: "openai",
       call: callMock,
       callStructured: vi.fn(),
       estimateTokens: vi.fn().mockReturnValue(10),

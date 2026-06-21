@@ -4,6 +4,7 @@ import type { ILLMCaller, LLMCallOptions, LLMCallResult } from "../core/interfac
 import { LLMCaller } from "../core/llm-caller.js";
 
 export class AnthropicCaller extends LLMCaller implements ILLMCaller {
+  readonly provider = "anthropic";
   private client: Anthropic;
 
   constructor(apiKey: string) {

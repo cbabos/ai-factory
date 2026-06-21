@@ -33,7 +33,7 @@ export class TaskDecomposer implements ITaskDecomposer {
       prompt,
       {
         model: this.decomposerModel,
-        provider: "openai", // resolved by caller instance
+        provider: this.llmCaller.provider,
         systemPrompt: SYSTEM_PROMPT,
         temperature: 0.2,
         maxTokens: 2000,

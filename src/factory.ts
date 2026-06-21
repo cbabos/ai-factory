@@ -9,6 +9,7 @@ import type {
   Provider,
   HealthCheck,
   IRepository,
+  ModelInfo,
 } from "./core/index.js";
 import {
   EventBus,
@@ -18,6 +19,7 @@ import {
   Orchestrator,
   Dispatcher,
   ModelSelector,
+  ModelCatalog,
   Aggregator,
   ComplexityEstimator,
   TaskDecomposer,
@@ -74,6 +76,14 @@ export class AIFactory {
   private healthChecker: HealthChecker;
   private repository?: IRepository<{ id: string }>;
 
+  private config: FactoryConfig;
+  private callers: Map<Provider, ILLMCaller>;
+  private breakers = new Map<Provider, CircuitBreaker>();
+  private defaultModel: string;
+  private defaultCaller: ILLMCaller;
+  private dispatcher: Dispatcher;
+  private aggregator: Aggregator;
+
   private sensors: ISensor[] = [];
   private adapters = new Map<string, ISignalAdapter>();
   private responders = new Map<string, IResponder>();
@@ -82,6 +92,7 @@ export class AIFactory {
   constructor(options: AIFactoryOptions) {
     const { config, secrets, callers: injectedCallers, logger, repository } = options;
 
+    this.config = config;
     this.logger = logger ?? new ConsoleLogger({ namespace: "AIFactory", level: "info" });
     this.repository = repository as IRepository<{ id: string }> | undefined;
     this.eventBus = new EventBus(new NoopLogger());
@@ -102,51 +113,32 @@ export class AIFactory {
 
     this.metricsCollector = new MetricsCollector(this.eventBus);
 
-    const breakers = new Map<Provider, CircuitBreaker>();
-    const callers = injectedCallers ?? this.buildCallers(config, secrets, breakers);
-    const defaultCaller = callers.values().next().value;
+    this.callers = injectedCallers ?? this.buildCallers(config, secrets, this.breakers);
+    const defaultCaller = this.callers.values().next().value;
     if (!defaultCaller) {
       throw new Error("No LLM callers configured");
     }
+    this.defaultCaller = defaultCaller;
+    this.defaultModel = config.complexity.estimatorModel;
 
     this.healthChecker = new HealthChecker(
-      this.buildHealthChecks(breakers),
+      this.buildHealthChecks(this.breakers),
       30_000,
     );
 
     const agents = this.buildAgents(defaultCaller);
-    const dispatcher = new Dispatcher(
+    this.dispatcher = new Dispatcher(
       this.agentRegistry,
       agents,
       config.dispatch.maxConcurrency,
     );
-
-    const estimator = new ComplexityEstimator(
-      defaultCaller,
-      config.complexity.estimatorModel,
-    );
-    const decomposer = new TaskDecomposer(
-      defaultCaller,
-      config.complexity.estimatorModel,
-    );
-    const modelSelector = new ModelSelector(config.models);
-    const aggregator = new Aggregator();
-
-    this.orchestrator = new Orchestrator({
-      estimator,
-      decomposer,
-      modelSelector,
-      dispatcher,
-      aggregator,
-      budgetTracker: this.budgetTracker,
-      eventBus: this.eventBus,
-      tracer: this.tracer,
-      decompositionThreshold: config.complexity.decompositionThreshold,
-    });
+    this.aggregator = new Aggregator();
 
     this.taskFactory = new TaskFactory();
     this.prioritizer = new Prioritizer();
     this.taskQueue = new InMemoryTaskQueue();
+
+    this.orchestrator = this.buildOrchestrator(config.models);
   }
 
   registerSensor(sensor: ISensor): void {
@@ -159,6 +151,44 @@ export class AIFactory {
 
   registerResponder(responder: IResponder): void {
     this.responders.set(responder.channel, responder);
+  }
+
+  async initialize(): Promise<void> {
+    const catalog = new ModelCatalog(
+      [...this.callers.values()],
+      this.config.models,
+      this.logger,
+    );
+
+    let discovered: { provider: string; modelId: string; ownedBy?: string }[] = [];
+    try {
+      const entries = await catalog.discoverAll();
+      discovered = entries.map((e) => ({
+        provider: e.discovered.provider,
+        modelId: e.discovered.modelId,
+        ownedBy: e.discovered.ownedBy,
+      }));
+      this.logger.info(`Discovered ${discovered.length} model(s): ${discovered.map((m) => `${m.provider}:${m.modelId}`).join(", ") || "none"}`);
+    } catch (err) {
+      this.logger.warn(
+        "Model discovery failed, falling back to static catalog:",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+
+    const preferred = discovered.find(
+      (m) => m.provider === "omlx" && /qwen/i.test(m.modelId),
+    ) ?? discovered.find((m) => /qwen/i.test(m.modelId));
+
+    if (preferred) {
+      this.defaultModel = preferred.modelId;
+      this.logger.info(`Selected default model: ${preferred.provider}:${preferred.modelId}`);
+    } else {
+      this.logger.info(`Using configured default model: ${this.defaultModel}`);
+    }
+
+    const mergedCatalog = this.buildMergedCatalog(discovered);
+    this.orchestrator = this.buildOrchestrator(mergedCatalog);
   }
 
   async start(): Promise<void> {
@@ -208,6 +238,48 @@ export class AIFactory {
 
   getHealthChecker(): HealthChecker {
     return this.healthChecker;
+  }
+
+  private buildMergedCatalog(
+    discovered: { provider: string; modelId: string; ownedBy?: string }[],
+  ): ModelInfo[] {
+    const staticByKey = new Map(
+      this.config.models.map((m) => [`${m.provider}:${m.modelId}`, m]),
+    );
+    const merged = new Map<string, ModelInfo>(staticByKey);
+
+    for (const d of discovered) {
+      const key = `${d.provider}:${d.modelId}`;
+      if (merged.has(key)) continue;
+      merged.set(key, {
+        provider: d.provider as Provider,
+        modelId: d.modelId,
+        maxTokens: 4096,
+        costPer1kInput: 0,
+        costPer1kOutput: 0,
+        capabilities: ["search", "analysis", "summarization", "execution", "code-generation", "file-io", "read-only", "write", "reasoning", "synthesis"],
+      });
+    }
+
+    return [...merged.values()];
+  }
+
+  private buildOrchestrator(catalog: ModelInfo[]): Orchestrator {
+    const estimator = new ComplexityEstimator(this.defaultCaller, this.defaultModel);
+    const decomposer = new TaskDecomposer(this.defaultCaller, this.defaultModel);
+    const modelSelector = new ModelSelector(catalog);
+
+    return new Orchestrator({
+      estimator,
+      decomposer,
+      modelSelector,
+      dispatcher: this.dispatcher,
+      aggregator: this.aggregator,
+      budgetTracker: this.budgetTracker,
+      eventBus: this.eventBus,
+      tracer: this.tracer,
+      decompositionThreshold: this.config.complexity.decompositionThreshold,
+    });
   }
 
   private buildHealthChecks(

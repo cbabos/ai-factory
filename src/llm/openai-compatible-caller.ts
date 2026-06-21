@@ -5,10 +5,12 @@ import { LLMCaller } from "../core/llm-caller.js";
 
 export class OpenAICompatibleCaller extends LLMCaller implements ILLMCaller {
   private client: OpenAI;
+  readonly provider: Provider;
   private providerName: Provider;
 
   constructor(baseURL: string, apiKey: string, providerName: Provider) {
     super();
+    this.provider = providerName;
     this.providerName = providerName;
     this.client = new OpenAI({ baseURL, apiKey });
   }

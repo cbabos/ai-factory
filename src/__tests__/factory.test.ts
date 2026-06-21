@@ -32,6 +32,7 @@ function makeFakeCaller(): ILLMCaller {
   }));
 
   return {
+    provider: "openai",
     call,
     callStructured: vi.fn().mockImplementation(async () => {
       return JSON.parse((await call("", { model: "", provider: "" })).content);
@@ -122,6 +123,7 @@ function makeConfig(): FactoryConfig {
 
 function makeSecrets(): EnvSecretsProvider {
   return {
+    provider: "openai",
     get: (_key: string) => undefined,
   } as EnvSecretsProvider;
 }

@@ -9,6 +9,7 @@ function makeCaller(
   models: DiscoveredModel[],
 ): ILLMCaller {
   return {
+    provider,
     call: vi.fn().mockResolvedValue({} as LLMCallResult),
     callStructured: vi.fn().mockResolvedValue({}),
     estimateTokens: vi.fn().mockReturnValue(1),
@@ -67,6 +68,7 @@ describe("ModelCatalog", () => {
   it("survives caller listModel failures", async () => {
     const good = makeCaller("openai", [{ provider: "openai", modelId: "gpt-4o", ownedBy: "openai" }]);
     const bad: ILLMCaller = {
+      provider: "openai",
       call: vi.fn(),
       callStructured: vi.fn(),
       estimateTokens: vi.fn(),

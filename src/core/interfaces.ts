@@ -16,6 +16,7 @@ import type {
   TaskTrace,
   TokenUsage,
   TraceSpan,
+  Provider,
 } from "./types.js";
 
 // ─── Observable (for sensors) ────────────────────────────────
@@ -159,6 +160,7 @@ export interface LLMCallResult {
 }
 
 export interface ILLMCaller {
+  readonly provider: Provider;
   call(prompt: string, options: LLMCallOptions): Promise<LLMCallResult>;
   callStructured<T>(prompt: string, options: LLMCallOptions, schema: object): Promise<T>;
   estimateTokens(prompt: string, model: string): number;

@@ -1,4 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   EmailAdapter,
   SlackAdapter,
@@ -92,13 +95,40 @@ describe("CronAdapter", () => {
 });
 
 describe("FileSystemAdapter", () => {
-  it("adapts a filesystem event", () => {
+  let tmpDir: string;
+  let filePath: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "fs-adapter-"));
+    filePath = join(tmpDir, "test.txt");
+    writeFileSync(filePath, "hello from file", "utf-8");
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("adapts a filesystem event and reads file contents", () => {
     const adapter = new FileSystemAdapter();
-    const raw = makeRaw("filesystem", { filePath: "/tmp/foo.txt", event: "changed" });
+    const raw = makeRaw("filesystem", { filePath, event: "changed" });
     const signal = adapter.adapt(raw);
     expect(signal.channel).toBe("filesystem");
-    expect(signal.content).toContain("/tmp/foo.txt");
+    expect(signal.content).toContain(filePath);
     expect(signal.content).toContain("changed");
-    expect(signal.metadata.filePath).toBe("/tmp/foo.txt");
+    expect(signal.content).toContain("hello from file");
+    expect(signal.metadata.filePath).toBe(filePath);
+    expect(signal.metadata.fileContent).toBe("hello from file");
+    expect(signal.metadata.truncated).toBe(false);
+  });
+
+  it("truncates oversized files", () => {
+    const bigFile = join(tmpDir, "big.txt");
+    writeFileSync(bigFile, "x".repeat(65 * 1024), "utf-8");
+    const adapter = new FileSystemAdapter();
+    const raw = makeRaw("filesystem", { filePath: bigFile, event: "add" });
+    const signal = adapter.adapt(raw);
+    expect(signal.metadata.truncated).toBe(true);
+    expect((signal.metadata.fileContent as string).length).toBe(64 * 1024);
+    expect(signal.content).toContain("truncated to 64KiB");
   });
 });

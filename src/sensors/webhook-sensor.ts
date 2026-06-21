@@ -1,28 +1,49 @@
+import type { Server } from "node:http";
+import express from "express";
 import type { RawSignal, Channel } from "../core/types.js";
 import type { ISensor } from "../core/interfaces.js";
 import { Subject } from "../core/observable.js";
+import { NoopLogger, type ILogger } from "../core/logger.js";
 
 export class WebhookSensor implements ISensor {
   readonly channel: Channel = "webhook";
-  readonly signals = new Subject<RawSignal>();
+  readonly signals: Subject<RawSignal>;
 
-  // Minimal stub: in production this would be an express/fastify server
-  private port: number;
-  private path: string;
+  private app: express.Express;
+  private server?: Server;
 
-  constructor(port: number, path: string = "/webhook") {
-    this.port = port;
-    this.path = path;
+  constructor(
+    private port: number,
+    private path: string = "/webhook",
+    logger?: ILogger,
+  ) {
+    this.signals = new Subject<RawSignal>(logger ?? new NoopLogger());
+    this.app = express();
+    this.app.use(express.json());
+    this.app.post(this.path, (req, res) => {
+      this.signals.next({
+        channel: "webhook",
+        payload: req.body,
+        receivedAt: Date.now(),
+        metadata: { headers: req.headers },
+      });
+      res.status(202).json({ received: true });
+    });
   }
 
   start(): void {
-    console.log(
-      `[WebhookSensor] Would start HTTP server on port ${this.port} at ${this.path}`,
-    );
+    this.server = this.app.listen(this.port);
+  }
+
+  getPort(): number | undefined {
+    const address = this.server?.address();
+    if (typeof address === "object" && address) return address.port;
+    return undefined;
   }
 
   stop(): void {
-    console.log("[WebhookSensor] Stopped");
+    this.server?.close();
+    this.server = undefined;
   }
 
   // Exposed for manual injection in tests/stubs

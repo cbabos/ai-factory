@@ -1,4 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
+import { createServer } from "node:http";
+import { readFile, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   EmailResponder,
   SlackResponder,
@@ -8,14 +12,14 @@ import {
 } from "../index.js";
 import type { FinalResult, Task } from "../../core/types.js";
 
-function makeTask(channel: Task["origin"]["channel"]): Task {
+function makeTask(channel: Task["origin"]["channel"], replyTo?: string): Task {
   return {
     id: "t1",
     description: "task",
     context: {},
     origin: {
       channel,
-      replyTo: "user@example.com",
+      replyTo: replyTo ?? "user@example.com",
       messageId: "m1",
       rawPayload: {},
     },
@@ -38,62 +42,72 @@ function makeResult(success: boolean): FinalResult {
 }
 
 describe("EmailResponder", () => {
-  it("logs and returns a receipt", async () => {
-    const responder = new EmailResponder();
-    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  it("sends email and returns a receipt", async () => {
+    const sendMail = vi.fn().mockResolvedValue({ messageId: "abc" });
+    const responder = new EmailResponder({ sendMail } as unknown as import("nodemailer").Transporter);
     const receipt = await responder.respond(makeResult(true), makeTask("email"));
 
     expect(receipt.success).toBe(true);
     expect(receipt.channel).toBe("email");
     expect(receipt.taskId).toBe("t1");
-    expect(log).toHaveBeenCalled();
-    log.mockRestore();
+    expect(sendMail).toHaveBeenCalledOnce();
   });
 
   it("formats failure results", async () => {
-    const responder = new EmailResponder();
-    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const sendMail = vi.fn().mockResolvedValue({ messageId: "abc" });
+    const responder = new EmailResponder({ sendMail } as unknown as import("nodemailer").Transporter);
     await responder.respond(makeResult(false), makeTask("email"));
 
-    const message = log.mock.calls[0]?.[0] as string;
-    expect(message).toContain("Task failed");
-    log.mockRestore();
+    const call = sendMail.mock.calls[0]?.[0] as { text: string };
+    expect(call.text).toContain("Task failed");
   });
 });
 
 describe("SlackResponder", () => {
-  it("logs and returns a receipt", async () => {
-    const responder = new SlackResponder();
-    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  it("posts message and returns a receipt", async () => {
+    const postMessage = vi.fn().mockResolvedValue({ ok: true });
+    const responder = new SlackResponder({ chat: { postMessage } });
     const receipt = await responder.respond(makeResult(true), makeTask("slack"));
 
     expect(receipt.channel).toBe("slack");
     expect(receipt.success).toBe(true);
-    log.mockRestore();
+    expect(postMessage).toHaveBeenCalledOnce();
   });
 
   it("formats success results with metrics", async () => {
-    const responder = new SlackResponder();
-    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const postMessage = vi.fn().mockResolvedValue({ ok: true });
+    const responder = new SlackResponder({ chat: { postMessage } });
     await responder.respond(makeResult(true), makeTask("slack"));
 
-    const message = log.mock.calls[0]?.[0] as string;
-    expect(message).toContain("100ms");
-    expect(message).toContain("$0.0010");
-    log.mockRestore();
+    const call = postMessage.mock.calls[0]?.[0] as { text: string };
+    expect(call.text).toContain("100ms");
+    expect(call.text).toContain("$0.0010");
   });
 });
 
 describe("WebhookResponder", () => {
-  it("logs and returns a receipt", async () => {
+  it("POSTs JSON and returns a receipt", async () => {
+    const server = createServer((req, res) => {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        res.writeHead(200);
+        res.end("ok");
+      });
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const address = server.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+    const url = `http://127.0.0.1:${port}/callback`;
+
     const responder = new WebhookResponder();
-    const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    const receipt = await responder.respond(makeResult(true), makeTask("webhook"));
+    const receipt = await responder.respond(makeResult(true), makeTask("webhook", url));
 
     expect(receipt.channel).toBe("webhook");
     expect(receipt.success).toBe(true);
-    expect(log).toHaveBeenCalled();
-    log.mockRestore();
+
+    server.close();
   });
 });
 
@@ -111,14 +125,16 @@ describe("CronResponder", () => {
 });
 
 describe("FileSystemResponder", () => {
-  it("logs and returns a receipt", async () => {
+  it("writes result to disk and returns a receipt", async () => {
+    const path = join(tmpdir(), `ai-factory-test-${Date.now()}.json`);
     const responder = new FileSystemResponder();
-    const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    const receipt = await responder.respond(makeResult(true), makeTask("filesystem"));
+    const receipt = await responder.respond(makeResult(true), makeTask("filesystem", path));
 
     expect(receipt.channel).toBe("filesystem");
     expect(receipt.success).toBe(true);
-    expect(log).toHaveBeenCalled();
-    log.mockRestore();
+
+    const content = await readFile(path, "utf8");
+    expect(content).toContain("t1");
+    await unlink(path);
   });
 });

@@ -5,16 +5,28 @@ export class WebhookResponder implements IResponder {
   readonly channel = "webhook";
 
   async respond(result: FinalResult, task: Task): Promise<DeliveryReceipt> {
-    console.log(
-      `[WebhookResponder] Would POST to ${task.origin.replyTo}:`,
-      JSON.stringify(result),
-    );
-
-    return {
-      taskId: task.id,
-      channel: "webhook",
-      deliveredAt: Date.now(),
-      success: true,
-    };
+    const url = task.origin.replyTo;
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(result),
+      });
+      return {
+        taskId: task.id,
+        channel: "webhook",
+        deliveredAt: Date.now(),
+        success: response.ok,
+        error: response.ok ? undefined : `HTTP ${response.status}`,
+      };
+    } catch (err) {
+      return {
+        taskId: task.id,
+        channel: "webhook",
+        deliveredAt: Date.now(),
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
   }
 }

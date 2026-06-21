@@ -1,6 +1,7 @@
 import { loadConfig } from "./core/config-loader.js";
 import { EnvSecretsProvider } from "./core/secrets.js";
 import { ConsoleLogger } from "./core/logger.js";
+import { SQLiteRepository } from "./core/sqlite-repository.js";
 import { AIFactory } from "./factory.js";
 import {
   EmailAdapter,
@@ -16,13 +17,18 @@ import {
   CronResponder,
   FileSystemResponder,
 } from "./responders/index.js";
-import { CronSensor } from "./sensors/index.js";
+import {
+  CronSensor,
+  WebhookSensor,
+  FileWatcherSensor,
+} from "./sensors/index.js";
 
 async function main() {
   const logger = new ConsoleLogger({ namespace: "AI Factory", level: "info" });
   const config = loadConfig("./factory.config.json");
   const secrets = new EnvSecretsProvider();
-  const factory = new AIFactory({ config, secrets, logger });
+  const repository = new SQLiteRepository("./ai-factory.db", "tasks");
+  const factory = new AIFactory({ config, secrets, logger, repository });
 
   // Register adapters
   factory.registerAdapter(new EmailAdapter());
@@ -40,11 +46,14 @@ async function main() {
 
   // Register sensors
   factory.registerSensor(new CronSensor(60_000, "Periodic status check"));
+  factory.registerSensor(new WebhookSensor(3000));
+  factory.registerSensor(new FileWatcherSensor("./watched", logger));
 
   // Graceful shutdown
   process.on("SIGINT", async () => {
     logger.info("Shutting down AI Factory...");
     await factory.stop();
+    repository.close();
     process.exit(0);
   });
 

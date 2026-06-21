@@ -27,20 +27,20 @@
 | **LLM Providers** | 1 abstract + 6 concrete + 2 local | 4 (`OpenAICaller`, `AnthropicCaller`, `GoogleCaller`, `OpenAICompatibleCaller`) | 1 (`LLMCaller`) | 0 | 3 (Mistral/Groq/Deepseek available via factory only) |
 | **Orchestrator Core** | 1 orch + 5 deps | 5 (`Orchestrator`, `Dispatcher`, `ComplexityEstimator`, `TaskDecomposer`, plus `Aggregator` and `ModelSelector` from Phase 1) | 0 | 0 | 0 |
 | **Agents** | 1 abstract + 5 concrete | 5 (`SearchAgent`, `AnalysisAgent`, `SummarizerAgent`, `ExecutorAgent`, `FileIOAgent`) | 1 (`Agent`) | 0 | 0 |
-| **Inbound** | 1 Observable + 5 Sensors + 5 Adapters + 1 Factory + 1 Prioritizer + 1 Queue | 9 (`Subject`, `CronSensor`, `WebhookSensor` stub, 5 Adapters, `TaskFactory`, `Prioritizer`, `InMemoryTaskQueue`) | 0 | 6 interfaces | 3+ (`EmailSensor`, `SlackSensor`, real `WebhookSensor` HTTP server) |
-| **Outbound** | 5 Responders | 5 (stubs) | 0 | 1 interface | 0 (real transport still missing for email/Slack/webhook) |
+| **Inbound** | 1 Observable + 5 Sensors + 5 Adapters + 1 Factory + 1 Prioritizer + 1 Queue | 10 (`Subject`, `CronSensor`, real `WebhookSensor`, real `FileWatcherSensor`, `EmailSensor` IMAP skeleton, `SlackSensor` Bolt skeleton, 5 Adapters, `TaskFactory`, `Prioritizer`, `InMemoryTaskQueue`) | 0 | 6 interfaces | 0 (real transport skeletons in place; email/Slack need credentials) |
+| **Outbound** | 5 Responders | 5 (real `EmailResponder` nodemailer, real `SlackResponder` web-api, real `WebhookResponder` fetch, real `FileSystemResponder` disk, `CronResponder`) | 0 | 1 interface | 0 (real transport in place; email/Slack need credentials) |
 | **Cross-cutting** | 7 | 6 (`EventBus`, `Tracer`, `BudgetTracker`, `AgentRegistry`, `InMemoryRepository`, `SecretsProvider`) | 2 (`Configurable`, `PipelineStep`) | 0 | 0 |
 | **Wiring/Entrypoint** | 3+ | 3 (`AIFactory`, `src/index.ts` barrel, `src/main.ts`) | 0 | 0 | 0 |
-| **Tests** | N | 169 (all components + integration + Phase 8 infrastructure) | 0 | 0 | 0 |
+| **Tests** | N | 174 (all components + integration + Phase 8 + Phase 9 skeletons) | 0 | 0 | 0 |
 | **Infrastructure** | ~8 concerns | 0 | 0 | 0 | Logging, metrics, rate limiting, health checks, DB persistence, full circuit breaker, input validation |
 
 **What compiles:** All source files pass `tsc --noEmit` with zero errors.
 
 **What lints clean:** `npm run lint` passes with `typescript-eslint` and zero errors.
 
-**What tests pass:** `npm test` runs 169 tests across Phase 1–7 core components, adapters, LLM callers, agents, responders, orchestrator dependencies, the end-to-end `AIFactory` integration, and all Phase 8 infrastructure (`Logger`, `RateLimiter`, `CircuitBreaker`, `MetricsCollector`, `HealthChecker`, `SQLiteRepository`).
+**What tests pass:** `npm test` runs 174 tests across Phase 1–7 core components, adapters, LLM callers, agents, responders, orchestrator dependencies, the end-to-end `AIFactory` integration, all Phase 8 infrastructure, and Phase 9 real-world sensor/responder skeletons.
 
-**What can actually run:** `src/main.ts` can start the full system end-to-end. It loads `factory.config.json`, constructs the `AIFactory`, registers adapters/responders/sensors, and runs the main loop. Real LLM calls require API keys in environment variables. Cron sensor is fully functional; webhook sensor is a stub; email/Slack/webhook responders are stubs. Integration tests in `src/__tests__/factory.test.ts` exercise the cron and webhook paths with a fake LLM caller.
+**What can actually run:** `src/main.ts` can start the full system end-to-end. It loads `factory.config.json`, constructs the `AIFactory` with an SQLite-backed `IRepository`, registers adapters/responders/sensors, and runs the main loop. Real LLM calls require API keys in environment variables. Real transport is now in place for webhook (Express HTTP server), file-system (chokidar/disk writes), email (nodemailer + IMAP skeleton), and Slack (Bolt/web-api skeleton); email/Slack require credentials to actually reach external services.
 
 ---
 
@@ -1885,8 +1885,8 @@ npm install pino            # Structured logging (optional — ConsoleLogger is 
 ### Required for Phase 9 (Real-World Integrations)
 
 ```bash
-npm install express imap @slack/bolt chokidar nodemailer
-npm install -D @types/express @types/imap @types/nodemailer
+npm install express imap @slack/bolt @slack/web-api chokidar nodemailer mailparser
+npm install -D @types/express @types/imap @types/nodemailer @types/mailparser
 ```
 
 `vitest` is already installed from Phase 7.
@@ -1977,20 +1977,20 @@ npm install -D @types/express @types/imap @types/nodemailer
 - [x] `HealthChecker` — `src/core/health-checker.ts`
 - [x] DB-backed `IRepository` implementation — `src/core/sqlite-repository.ts` (uses built-in `node:sqlite`, zero extra deps)
 
-### Phase 9 — Real-World Integrations
+### Phase 9 — Real-World Integrations (done)
 
-- [ ] Real `WebhookSensor` HTTP server
-- [ ] `EmailSensor`
-- [ ] `SlackSensor`
-- [ ] `FileWatcherSensor`
-- [ ] Real `EmailResponder` via nodemailer
-- [ ] Real `SlackResponder`
-- [ ] Real `WebhookResponder` HTTP callbacks
-- [ ] Real `FileSystemResponder` disk writes
+- [x] Real `WebhookSensor` HTTP server — `src/sensors/webhook-sensor.ts` (Express)
+- [x] `FileWatcherSensor` — `src/sensors/file-watcher-sensor.ts` (chokidar)
+- [x] `EmailSensor` IMAP skeleton — `src/sensors/email-sensor.ts` (imap + mailparser)
+- [x] `SlackSensor` Bolt skeleton — `src/sensors/slack-sensor.ts` (@slack/bolt)
+- [x] Real `EmailResponder` via nodemailer — `src/responders/email-responder.ts`
+- [x] Real `SlackResponder` via @slack/web-api — `src/responders/slack-responder.ts`
+- [x] Real `WebhookResponder` HTTP callbacks — `src/responders/webhook-responder.ts`
+- [x] Real `FileSystemResponder` disk writes — `src/responders/filesystem-responder.ts`
 
 ### Tests (complete)
 
 - [x] `npm install -D vitest`
 - [x] `vitest.config.ts`
 - [x] Unit tests for Phase 1 zero-dependency components (71 tests passing)
-- [x] Unit tests for LLM callers, ModelCatalog, all 5 Agents, Tracer, Responders, Orchestrator dependencies, AIFactory integration, Logger, RateLimiter, CircuitBreaker, MetricsCollector, HealthChecker, SQLiteRepository (98 tests passing)
+- [x] Unit tests for LLM callers, ModelCatalog, all 5 Agents, Tracer, Responders, Orchestrator dependencies, AIFactory integration, Logger, RateLimiter, CircuitBreaker, MetricsCollector, HealthChecker, SQLiteRepository, real sensors/responders (98 tests passing)

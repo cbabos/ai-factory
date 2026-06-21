@@ -8,6 +8,7 @@ import type {
   FinalResult,
   Provider,
   HealthCheck,
+  IRepository,
 } from "./core/index.js";
 import {
   EventBus,
@@ -56,6 +57,7 @@ export interface AIFactoryOptions {
   secrets: SecretsProvider;
   callers?: Map<Provider, ILLMCaller>;
   logger?: ILogger;
+  repository?: IRepository<{ id: string }>;
 }
 
 export class AIFactory {
@@ -70,6 +72,7 @@ export class AIFactory {
   private logger: ILogger;
   private metricsCollector: MetricsCollector;
   private healthChecker: HealthChecker;
+  private repository?: IRepository<{ id: string }>;
 
   private sensors: ISensor[] = [];
   private adapters = new Map<string, ISignalAdapter>();
@@ -77,9 +80,10 @@ export class AIFactory {
   private running = false;
 
   constructor(options: AIFactoryOptions) {
-    const { config, secrets, callers: injectedCallers, logger } = options;
+    const { config, secrets, callers: injectedCallers, logger, repository } = options;
 
     this.logger = logger ?? new ConsoleLogger({ namespace: "AIFactory", level: "info" });
+    this.repository = repository as IRepository<{ id: string }> | undefined;
     this.eventBus = new EventBus(new NoopLogger());
     this.tracer = new Tracer();
 

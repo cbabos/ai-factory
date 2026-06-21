@@ -1,5 +1,6 @@
 import type { DiscoveredModel, ModelInfo, Provider } from "../core/types.js";
 import type { ILLMCaller } from "../core/interfaces.js";
+import { ConsoleLogger, type ILogger } from "./logger.js";
 
 export interface CatalogEntry {
   discovered: DiscoveredModel;
@@ -9,10 +10,12 @@ export interface CatalogEntry {
 export class ModelCatalog {
   private callers: ILLMCaller[];
   private staticModels: ModelInfo[];
+  private logger: ILogger;
 
-  constructor(callers: ILLMCaller[], staticModels: ModelInfo[] = []) {
+  constructor(callers: ILLMCaller[], staticModels: ModelInfo[] = [], logger: ILogger = new ConsoleLogger({ namespace: "ModelCatalog" })) {
     this.callers = callers;
     this.staticModels = staticModels;
+    this.logger = logger;
   }
 
   async discoverAll(): Promise<CatalogEntry[]> {
@@ -34,8 +37,8 @@ export class ModelCatalog {
           results.push({ discovered: m, enriched });
         }
       } catch (err) {
-        console.error(
-          `[ModelCatalog] Failed to list models from caller:`,
+        this.logger.error(
+          "Failed to list models from caller:",
           err instanceof Error ? err.message : String(err),
         );
       }

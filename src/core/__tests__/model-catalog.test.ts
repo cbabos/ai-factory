@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { ModelCatalog } from "../model-catalog.js";
+import { NoopLogger } from "../logger.js";
 import type { ILLMCaller, LLMCallResult } from "../interfaces.js";
 import type { DiscoveredModel, ModelInfo, Provider } from "../types.js";
 
@@ -72,7 +73,7 @@ describe("ModelCatalog", () => {
       listModels: vi.fn().mockRejectedValue(new Error("network")),
     };
 
-    const catalog = new ModelCatalog([bad, good], []);
+    const catalog = new ModelCatalog([bad, good], [], new NoopLogger());
     const entries = await catalog.discoverAll();
     expect(entries).toHaveLength(1);
     expect(entries[0]?.discovered.modelId).toBe("gpt-4o");

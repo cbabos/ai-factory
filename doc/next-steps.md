@@ -12,7 +12,7 @@
 8. [Phase 6: Outbound Layer](#phase-6-outbound-layer)
 9. [Phase 7: Wiring & Entrypoint](#phase-7-wiring--entrypoint)
 10. [Phase 8: Supporting Infrastructure](#phase-8-supporting-infrastructure)
-11. [Phase 9: Tests](#phase-9-tests)
+11. [Phase 9: Real-World Integrations](#phase-9-real-world-integrations)
 12. [External Dependencies (npm packages)](#external-dependencies-npm-packages)
 13. [Master Checklist](#master-checklist)
 
@@ -31,16 +31,16 @@
 | **Outbound** | 5 Responders | 5 (stubs) | 0 | 1 interface | 0 (real transport still missing for email/Slack/webhook) |
 | **Cross-cutting** | 7 | 6 (`EventBus`, `Tracer`, `BudgetTracker`, `AgentRegistry`, `InMemoryRepository`, `SecretsProvider`) | 2 (`Configurable`, `PipelineStep`) | 0 | 0 |
 | **Wiring/Entrypoint** | 3+ | 3 (`AIFactory`, `src/index.ts` barrel, `src/main.ts`) | 0 | 0 | 0 |
-| **Tests** | N | 141 (all components + integration) | 0 | 0 | 0 |
+| **Tests** | N | 146 (all components + integration + logger) | 0 | 0 | 0 |
 | **Infrastructure** | ~8 concerns | 0 | 0 | 0 | Logging, metrics, rate limiting, health checks, DB persistence, full circuit breaker, input validation |
 
 **What compiles:** All source files pass `tsc --noEmit` with zero errors.
 
 **What lints clean:** `npm run lint` passes with `typescript-eslint` and zero errors.
 
-**What tests pass:** `npm test` runs 96 unit tests across Phase 1 core components, adapters, LLM callers, and `ModelCatalog`.
+**What tests pass:** `npm test` runs 146 tests across Phase 1–7 core components, adapters, LLM callers, agents, responders, orchestrator dependencies, the end-to-end `AIFactory` integration, and the new `Logger`.
 
-**What can actually run:** `src/main.ts` can now start the full system end-to-end. It loads `factory.config.json`, constructs the `AIFactory`, registers adapters/responders/sensors, and runs the main loop. Real LLM calls require API keys in environment variables. Cron sensor is fully functional; webhook sensor is a stub; email/Slack/webhook responders are stubs.
+**What can actually run:** `src/main.ts` can start the full system end-to-end. It loads `factory.config.json`, constructs the `AIFactory`, registers adapters/responders/sensors, and runs the main loop. Real LLM calls require API keys in environment variables. Cron sensor is fully functional; webhook sensor is a stub; email/Slack/webhook responders are stubs. Integration tests in `src/__tests__/factory.test.ts` exercise the cron and webhook paths with a fake LLM caller.
 
 ---
 
@@ -1772,9 +1772,31 @@ export class HealthChecker {
 
 ---
 
-## Phase 9: Tests
+## Phase 9: Real-World Integrations
 
-### 9.1 — Test Framework Setup
+Phase 8 infrastructure can be built incrementally before tackling this section.
+
+### 9.1 — Real Inbound Sensors
+
+Replace stub sensors with real network/file-system integrations:
+
+- **`WebhookSensor`** — start an actual HTTP server (e.g., Express or Node built-in `http`) and emit `RawSignal` from incoming POSTs.
+- **`EmailSensor`** — poll an IMAP inbox or listen for new messages.
+- **`SlackSensor`** — run a Slack Bolt app and emit signals from mentions/DMs.
+- **`FileWatcherSensor`** — watch a directory with `chokidar` and emit signals on file changes.
+
+### 9.2 — Real Outbound Responders
+
+Replace console-log stubs with real transport:
+
+- **`EmailResponder`** — send email via `nodemailer`.
+- **`SlackResponder`** — post messages via Slack web API or Bolt client.
+- **`WebhookResponder`** — perform real HTTP POST callbacks.
+- **`FileSystemResponder`** — write results to disk.
+
+### 9.3 — Tests (complete)
+
+The test framework and inventory are already in place.
 
 ```bash
 npm install -D vitest
@@ -1801,7 +1823,7 @@ export default defineConfig({
 });
 ```
 
-### 9.2 — Test Inventory
+#### Test Inventory
 
 | Phase | Component | Test File | Dependencies |
 |-------|-----------|-----------|-------------|
@@ -1860,11 +1882,14 @@ npm install -D @types/nodemailer
 npm install pino            # Structured logging (optional — ConsoleLogger is zero-dep)
 ```
 
-### Required for Phase 9 (Tests)
+### Required for Phase 9 (Real-World Integrations)
 
 ```bash
-npm install -D vitest
+npm install express imap @slack/bolt chokidar nodemailer
+npm install -D @types/express @types/imap @types/nodemailer
 ```
+
+`vitest` is already installed from Phase 7.
 
 ---
 
@@ -1943,18 +1968,29 @@ npm install -D vitest
 - [x] `src/main.ts` — runtime entrypoint
 - [x] Integration test — src/__tests__/factory.test.ts
 
-### Phase 8 — Infrastructure (can be done incrementally)
+### Phase 8 — Infrastructure (in progress)
 
-- [ ] `Logger` + `ConsoleLogger` — `src/core/logger.ts`
+- [x] `Logger` + `ConsoleLogger` + `NoopLogger` — `src/core/logger.ts`
 - [ ] `MetricsCollector` — `src/core/metrics.ts`
 - [ ] `RateLimiter` — `src/core/rate-limiter.ts`
 - [ ] `CircuitBreaker` — `src/core/circuit-breaker.ts`
 - [ ] `HealthChecker` — `src/core/health.ts`
 - [ ] DB-backed `IRepository` implementation (SQLite/PostgreSQL)
 
-### Phase 9 — Tests (partially complete)
+### Phase 9 — Real-World Integrations
+
+- [ ] Real `WebhookSensor` HTTP server
+- [ ] `EmailSensor`
+- [ ] `SlackSensor`
+- [ ] `FileWatcherSensor`
+- [ ] Real `EmailResponder` via nodemailer
+- [ ] Real `SlackResponder`
+- [ ] Real `WebhookResponder` HTTP callbacks
+- [ ] Real `FileSystemResponder` disk writes
+
+### Tests (complete)
 
 - [x] `npm install -D vitest`
 - [x] `vitest.config.ts`
 - [x] Unit tests for Phase 1 zero-dependency components (71 tests passing)
-- [x] Unit tests for LLM callers, ModelCatalog, all 5 Agents, Tracer, Responders, Orchestrator dependencies, AIFactory integration (56 tests passing)
+- [x] Unit tests for LLM callers, ModelCatalog, all 5 Agents, Tracer, Responders, Orchestrator dependencies, AIFactory integration, Logger (75 tests passing)

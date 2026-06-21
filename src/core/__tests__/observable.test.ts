@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { Subject } from "../observable.js";
+import { NoopLogger } from "../logger.js";
 
 describe("Subject", () => {
   it("calls synchronous subscribers", () => {
@@ -42,7 +43,7 @@ describe("Subject", () => {
   });
 
   it("does not throw when a handler throws", () => {
-    const subject = new Subject<string>();
+    const subject = new Subject<string>(new NoopLogger());
     const errorHandler = vi.fn().mockImplementation(() => {
       throw new Error("boom");
     });

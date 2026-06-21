@@ -14,6 +14,7 @@ import {
   CronResponder,
 } from "../responders/index.js";
 import type { ILLMCaller, LLMCallOptions, LLMCallResult } from "../core/interfaces.js";
+import { NoopLogger } from "../core/logger.js";
 import type { FactoryConfig } from "../core/types.js";
 
 function makeFakeCaller(): ILLMCaller {
@@ -127,7 +128,7 @@ function makeSecrets(): EnvSecretsProvider {
 
 describe("AIFactory integration", () => {
   it("processes a cron signal through the full pipeline", async () => {
-    const factory = new AIFactory({ config: makeConfig(), secrets: makeSecrets(), callers: new Map([["openai", makeFakeCaller()]]) });
+    const factory = new AIFactory({ config: makeConfig(), secrets: makeSecrets(), callers: new Map([["openai", makeFakeCaller()]]), logger: new NoopLogger() });
 
     factory.registerAdapter(new CronAdapter());
     factory.registerResponder(new CronResponder());
@@ -149,7 +150,7 @@ describe("AIFactory integration", () => {
   });
 
   it("processes a webhook signal via manual injection", async () => {
-    const factory = new AIFactory({ config: makeConfig(), secrets: makeSecrets(), callers: new Map([["openai", makeFakeCaller()]]) });
+    const factory = new AIFactory({ config: makeConfig(), secrets: makeSecrets(), callers: new Map([["openai", makeFakeCaller()]]), logger: new NoopLogger() });
 
     factory.registerAdapter(new WebhookAdapter());
     factory.registerResponder(new WebhookResponder());

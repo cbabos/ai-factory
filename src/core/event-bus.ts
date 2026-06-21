@@ -1,17 +1,20 @@
 import type { FactoryEvent, EventType } from "./types.js";
 import type { IEventBus, Subscription } from "./interfaces.js";
+import { ConsoleLogger, type ILogger } from "./logger.js";
 
 type EventHandler = (event: FactoryEvent) => void | Promise<void>;
 
 export class EventBus implements IEventBus {
   private handlers = new Map<string, Set<EventHandler>>();
 
+  constructor(private logger: ILogger = new ConsoleLogger({ namespace: "EventBus" })) {}
+
   emit(event: FactoryEvent): void {
     const handlers = this.handlers.get(event.type);
     if (!handlers) return;
     for (const handler of handlers) {
       void Promise.resolve(handler(event)).catch((err) => {
-        console.error(`[EventBus] handler error for ${event.type}:`, err);
+        this.logger.error(`handler error for ${event.type}:`, err);
       });
     }
   }

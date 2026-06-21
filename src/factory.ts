@@ -22,6 +22,9 @@ import {
   TaskFactory,
   Prioritizer,
   InMemoryTaskQueue,
+  ConsoleLogger,
+  NoopLogger,
+  type ILogger,
 } from "./core/index.js";
 import {
   OpenAICaller,
@@ -46,6 +49,7 @@ export interface AIFactoryOptions {
   config: FactoryConfig;
   secrets: SecretsProvider;
   callers?: Map<Provider, ILLMCaller>;
+  logger?: ILogger;
 }
 
 export class AIFactory {
@@ -57,6 +61,7 @@ export class AIFactory {
   private taskFactory: TaskFactory;
   private prioritizer: Prioritizer;
   private taskQueue: InMemoryTaskQueue;
+  private logger: ILogger;
 
   private sensors: ISensor[] = [];
   private adapters = new Map<string, ISignalAdapter>();
@@ -64,9 +69,10 @@ export class AIFactory {
   private running = false;
 
   constructor(options: AIFactoryOptions) {
-    const { config, secrets } = options;
+    const { config, secrets, callers: injectedCallers, logger } = options;
 
-    this.eventBus = new EventBus();
+    this.logger = logger ?? new ConsoleLogger({ namespace: "AIFactory", level: "info" });
+    this.eventBus = new EventBus(new NoopLogger());
     this.tracer = new Tracer();
 
     this.budgetTracker = new BudgetTracker(this.eventBus);
@@ -82,7 +88,7 @@ export class AIFactory {
       this.agentRegistry.register(manifest);
     }
 
-    const callers = options.callers ?? this.buildCallers(config, secrets);
+    const callers = injectedCallers ?? this.buildCallers(config, secrets);
     const defaultCaller = callers.values().next().value;
     if (!defaultCaller) {
       throw new Error("No LLM callers configured");
@@ -254,7 +260,7 @@ export class AIFactory {
     const rawSignal = raw as import("./core/types.js").RawSignal;
     const adapter = this.adapters.get(rawSignal.channel);
     if (!adapter) {
-      console.warn(`[AIFactory] No adapter for channel: ${raw.channel}`);
+      this.logger.warn(`No adapter for channel: ${raw.channel}`);
       return;
     }
     const signal = adapter.adapt(rawSignal);
@@ -265,8 +271,8 @@ export class AIFactory {
   private async deliverResult(result: FinalResult, task: Task): Promise<void> {
     const responder = this.responders.get(task.origin.channel);
     if (!responder) {
-      console.warn(
-        `[AIFactory] No responder for channel: ${task.origin.channel}`,
+      this.logger.warn(
+        `No responder for channel: ${task.origin.channel}`,
       );
       return;
     }

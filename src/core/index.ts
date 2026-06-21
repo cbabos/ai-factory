@@ -21,3 +21,4 @@ export * from "./task-queue.js";
 export * from "./config-loader.js";
 export * from "./complexity-estimator.js";
 export * from "./task-decomposer.js";
+export * from "./logger.js";

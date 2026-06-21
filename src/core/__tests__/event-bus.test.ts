@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { EventBus } from "../event-bus.js";
+import { NoopLogger } from "../logger.js";
 import type { FactoryEvent } from "../types.js";
 
 function makeEvent(type: string, payload: Record<string, unknown>): FactoryEvent {
@@ -66,7 +67,7 @@ describe("EventBus", () => {
   });
 
   it("handles async handler errors without throwing", async () => {
-    const bus = new EventBus();
+    const bus = new EventBus(new NoopLogger());
     const error = vi.fn().mockRejectedValue(new Error("async boom"));
     const success = vi.fn();
     bus.on("task:created", error);

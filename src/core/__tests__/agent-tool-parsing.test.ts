@@ -176,7 +176,8 @@ describe("Agent tool parsing", () => {
 
   it("fails when the final answer still contains unexecuted tool-like content", async () => {
     // The model never provides a clean final answer; it keeps emitting malformed tool blocks.
-    const responses = Array.from({ length: 6 }, () =>
+    // MAX_TOOL_ITERATIONS is 5. Provide 5 malformed blocks so the loop exhausts.
+    const responses = Array.from({ length: 5 }, () =>
       `<tool name="readFile">\n{"path":"foo.txt"}\n</function>\n<tool>`,
     );
     const caller = makeCaller(responses);
@@ -184,6 +185,35 @@ describe("Agent tool parsing", () => {
     const result = await agent.execute(makeSubTask());
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/tool-like block/);
-    expect(caller.call).toHaveBeenCalledTimes(5);
+    expect(caller.call).toHaveBeenCalledTimes(3);
+  });
+
+  it("recovers when the final answer contains only already-executed duplicate tool calls", async () => {
+    // First iteration executes a real tool call, second iteration repeats the same call.
+    // The agent should ignore the duplicate and re-prompt for a final answer.
+    const responses = [
+      `call:tool:readFile\n{"path":"foo.txt"}`,
+      `call:tool:readFile\n{"path":"foo.txt"}`,
+      "The file contains bar",
+    ];
+    const caller = makeCaller(responses);
+    const agent = new TestAgent(caller, makeRegistry());
+    const result = await agent.execute(makeSubTask());
+    expect(result.success).toBe(true);
+    expect(result.output).toEqual({ result: "The file contains bar" });
+    expect(caller.call).toHaveBeenCalledTimes(3);
+  });
+
+  it("recovers when a tool call is wrapped in explanatory prose", async () => {
+    const responses = [
+      `Let me explore the directory first.\n\ncall:tool:readFile\n{"path":"foo.txt"}`,
+      "The file contains bar",
+    ];
+    const caller = makeCaller(responses);
+    const agent = new TestAgent(caller, makeRegistry());
+    const result = await agent.execute(makeSubTask());
+    expect(result.success).toBe(true);
+    expect(result.output).toEqual({ result: "The file contains bar" });
+    expect(caller.call).toHaveBeenCalledTimes(2);
   });
 });

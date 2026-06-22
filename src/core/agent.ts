@@ -15,7 +15,7 @@ function tryJsonParse(text: string): Record<string, unknown> | undefined {
 
 
 
-const TOOL_CALL_START = /^(?:\u003ctool\s+name=|\u003cfunction(?:=|\s)|call:tool:)/m;
+const TOOL_CALL_START = /(?:\u003ctool\s+name=|\u003cfunction(?:=|\s)|call:tool:)/m;
 
 function extractJsonBlock(text: string): string {
   const firstBrace = text.indexOf("{");
@@ -168,6 +168,16 @@ export abstract class Agent
               }
               prompt = `${basePrompt}\n\nYour previous response:\n${lastContent}\n\n${formatToolResults(toolResults)}\n\nContinue or provide a final answer. If a tool failed or does not exist, do not call it again; answer based on what you already know.`;
               iteration++;
+
+              // If the response still contains an unexecuted tool-like block after
+              // running the freshly parsed calls, the loop is about to exit. Give the
+              // model one extra turn to answer directly before we treat leftover
+              // markers or duplicate calls as a hard failure.
+              if (looksLikeToolCall(lastContent) && iteration < MAX_TOOL_ITERATIONS) {
+                prompt = `${basePrompt}\n\nYour previous response still contained a tool-like block:\n${lastContent}\n\nYou already have the tool results above. Please provide a final answer with no tool block.`;
+                iteration++;
+                continue;
+              }
             }
 
             // If the final response still contains an unexecuted tool-like block,

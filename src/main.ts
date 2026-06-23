@@ -1,4 +1,6 @@
 import "dotenv/config";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { loadConfig } from "./core/config-loader.js";
 import { EnvSecretsProvider } from "./core/secrets.js";
 import { ConsoleLogger } from "./core/logger.js";
@@ -28,6 +30,7 @@ import {
 async function main() {
   const logger = new ConsoleLogger({ namespace: "AI Factory", level: "debug" });
   const config = loadConfig("./factory.config.json");
+  const uiDistPath = resolve(process.cwd(), "src/ui/dist");
   const secrets = new EnvSecretsProvider();
   const tools = new ToolRegistry();
   for (const tool of createFileTools()) {
@@ -43,7 +46,11 @@ async function main() {
     logger, 
     taskRepository, 
     tools,
-    apiServerOptions: { port: 3001, enableSse: true }
+    apiServerOptions: {
+      port: 3001,
+      enableSse: true,
+      staticPath: existsSync(uiDistPath) ? uiDistPath : undefined,
+    }
   });
   
   factory.setSettingsStore(settingsStore);

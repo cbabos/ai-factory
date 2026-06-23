@@ -2,6 +2,8 @@ import type { Request, Response, NextFunction, Router } from "express";
 import express, { type Application } from "express";
 import type { Server } from "http";
 import type { Server as HTTPSServer } from "https";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { IAgentStore } from "./agent-store.js";
 import type { IModelStore } from "./model-store.js";
 import type { ITaskRepository } from "./task-repository.js";
@@ -153,8 +155,16 @@ export class ApiServer {
   }
 
   private setupStaticFiles(): void {
-    if (this.staticPath) {
+    if (this.staticPath && existsSync(this.staticPath)) {
       this.app.use(express.static(this.staticPath));
+      this.app.get("/{*uiPath}", (req, res, next) => {
+        if (req.path.startsWith("/api")) {
+          next();
+          return;
+        }
+
+        res.sendFile(join(this.staticPath!, "index.html"));
+      });
     }
   }
 
@@ -334,5 +344,4 @@ export class ApiServer {
     return this.app;
   }
 }
-
 

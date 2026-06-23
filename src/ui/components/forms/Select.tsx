@@ -39,7 +39,7 @@ export interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement
   startIcon?: React.ReactNode;
   
   /**
-   * Show cyrillic dropdown arrow
+   * Use alternate glyph arrow
    */
   cyrillicArrow?: boolean;
   
@@ -76,7 +76,7 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
       options = [],
       onChange,
       startIcon,
-      cyrillicArrow = true,
+      cyrillicArrow: _cyrillicArrow = false,
       cyberBorder,
       glitchEffect,
       size = 'md',
@@ -134,9 +134,9 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
 
     // Size styles
     const sizeClasses = {
-      sm: 'py-2 text-sm',
-      md: 'py-3 text-sm',
-      lg: 'py-4 text-base',
+      sm: 'px-3 py-2 text-sm',
+      md: 'px-4 py-3 text-sm',
+      lg: 'px-4 py-4 text-base',
     };
 
     // Variant styles
@@ -164,16 +164,6 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
           d="M19 9l-7 7-7-7"
         />
       </svg>
-    );
-
-    // Cyrillic arrow variant
-    const CyrillicArrow = () => (
-      <div
-        className="text-accent-primary text-lg leading-none"
-        aria-hidden="true"
-      >
-        ⌠
-      </div>
     );
 
     return (
@@ -212,7 +202,7 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
             )}
 
             {/* Selected value */}
-            <span className="flex-1 truncate">
+            <span className="min-w-0 flex-1 truncate">
               {selectedOption?.icon && (
                 <span className="mr-2 inline-block align-middle">
                   {selectedOption.icon}
@@ -224,8 +214,8 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
             </span>
 
             {/* Arrow icon */}
-            <span className="ml-2 text-accent-primary">
-              {cyrillicArrow ? <CyrillicArrow /> : <ArrowIcon />}
+            <span className="ml-2 flex-shrink-0 text-accent-primary">
+              <ArrowIcon />
             </span>
           </div>
 
@@ -240,7 +230,7 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
 
           {/* Cyberpunk glow effect */}
           {cyberBorder && (
-            <div className="absolute inset-0 rounded-cyber border-2 border-accent-primary/20 pointer-events-none animate-[border-pulse_2s_infinite]" />
+            <div className="absolute inset-0 rounded-cyber border border-accent-primary/20 pointer-events-none animate-[border-pulse_2s_infinite]" />
           )}
 
           {/* Dropdown list */}

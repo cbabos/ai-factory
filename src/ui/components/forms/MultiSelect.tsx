@@ -182,9 +182,18 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
 
   // Size styles
   const sizeClasses = {
-    sm: 'py-2 text-sm',
-    md: 'py-3 text-sm',
-    lg: 'py-4 text-base',
+    sm: {
+      container: 'text-sm',
+      content: 'px-3 py-2 min-h-[38px]',
+    },
+    md: {
+      container: 'text-sm',
+      content: 'px-4 py-3 min-h-[46px]',
+    },
+    lg: {
+      container: 'text-base',
+      content: 'px-4 py-4 min-h-[54px]',
+    },
   };
 
   // Variant styles
@@ -209,7 +218,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
         className={`
           relative w-full cursor-pointer
           ${variantClasses[variant]}
-          ${sizeClasses[size]}
+          ${sizeClasses[size].container}
           rounded-cyber border
           transition-all duration-200 ease-[cubic-bezier(0.68,-0.55,0.27,1.55)]
           ${glitchEffect ? 'animate-[glitch-text_3s_infinite]' : ''}
@@ -221,7 +230,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
         aria-controls="multiselect-dropdown"
       >
         {/* Selected items */}
-        <div className="flex flex-wrap items-center gap-1.5 px-2 py-1 min-h-[2.5rem]">
+        <div className={`flex flex-wrap items-center gap-1.5 pr-14 ${sizeClasses[size].content}`}>
           {value.length > 0 ? (
             value.map((itemValue) => {
               const option = options.find((opt) => opt.value === itemValue);
@@ -343,7 +352,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
 
         {/* Cyberpunk glow effect */}
         {cyberBorder && (
-          <div className="absolute inset-0 rounded-cyber border-2 border-accent-primary/20 pointer-events-none animate-[border-pulse_2s_infinite]" />
+          <div className="absolute inset-0 rounded-cyber border border-accent-primary/20 pointer-events-none animate-[border-pulse_2s_infinite]" />
         )}
       </div>
 

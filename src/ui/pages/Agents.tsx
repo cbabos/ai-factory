@@ -1,16 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Panel } from '../components/layout/Panel.js';
-import { Grid } from '../components/layout/Grid.js';
-import { GridItem } from '../components/layout/Grid.js';
-import { Card } from '../components/layout/Card.js';
 import { Button } from '../components/controls/Button.js';
-import { Badge } from '../components/ui/Badge.js';
 import { Alert } from '../components/ui/Alert.js';
 import { Select } from '../components/forms/Select.js';
 import { MultiSelect } from '../components/forms/MultiSelect.js';
-import { StatusIndicator } from '../components/ui/StatusIndicator.js';
 import { AgentForm } from './AgentForm.js';
-import { apiClient, type AgentMutationInput, type AgentRecord } from '../services/index.js';
+import { apiClient, type AgentMutationInput, type AgentRecord, type ModelRecord } from '../services/index.js';
 
 interface AgentFilter {
   tags: string[];
@@ -31,16 +26,43 @@ const complexityRangeMap: Record<string, [number, number]> = {
   'high': [5, 10],
 };
 
+function slugifyAgentName(name: string): string {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return slug || `agent-${Date.now()}`;
+}
+
+function createUniqueAgentId(name: string, existingIds: string[]): string {
+  const baseId = slugifyAgentName(name);
+  const taken = new Set(existingIds);
+  if (!taken.has(baseId)) return baseId;
+
+  let suffix = 2;
+  while (taken.has(`${baseId}-${suffix}`)) {
+    suffix += 1;
+  }
+  return `${baseId}-${suffix}`;
+}
+
 export interface AgentsPageProps {
   title?: string;
   subtitle?: string;
 }
+
+const formatAvailabilityLabel = (isActive: boolean): string => {
+  return isActive ? 'available' : 'inactive';
+};
 
 const AgentsPage: React.FC<AgentsPageProps> = ({
   title = 'Agents',
   subtitle = 'Manage AI agent configurations',
 }) => {
   const [agents, setAgents] = useState<AgentRecord[]>([]);
+  const [models, setModels] = useState<ModelRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -55,8 +77,12 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
   const loadAgents = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await apiClient.listAgents();
-      setAgents(data);
+      const [agentData, modelData] = await Promise.all([
+        apiClient.listAgents(),
+        apiClient.listModels(),
+      ]);
+      setAgents(agentData);
+      setModels(modelData);
       setError(null);
     } catch (err) {
       console.error('Failed to load agents:', err);
@@ -123,8 +149,12 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
   const handleFormSubmit = async (agentData: Partial<AgentMutationInput>) => {
     try {
       setLoading(true);
+      const id = editingAgent?.id ?? createUniqueAgentId(
+        agentData.name || 'Unnamed Agent',
+        agents.map((agent) => agent.id),
+      );
       const agent: AgentMutationInput = {
-        id: agentData.id || `agent-${Date.now()}`,
+        id,
         name: agentData.name || 'Unnamed Agent',
         tags: agentData.tags || [],
         complexityMin: agentData.complexityMin ?? 1,
@@ -172,13 +202,6 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
     }));
   };
 
-  const handleTagRemove = (tag: string) => {
-    setFilter((prev) => ({
-      ...prev,
-      tags: prev.tags.filter((t) => t !== tag),
-    }));
-  };
-
   const allTags = useMemo(() => {
     const tags = new Set<string>();
     agents.forEach((agent) => agent.tags.forEach((tag) => tags.add(tag)));
@@ -200,7 +223,7 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
     <Panel
       title={title}
       subtitle={subtitle}
-      padding="lg"
+      padding="md"
       cyber
       glitchEffect
     >
@@ -221,37 +244,6 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
             <label className="text-xs font-medium text-text-primary tracking-wider uppercase mb-2 block">
               Filter by Tags
             </label>
-            <div className="flex flex-wrap gap-2 mb-2">
-               {filter.tags.map((tag) => (
-                 <Badge key={tag} variant="cyber" size="sm">
-                   <span className="flex items-center gap-1">
-                     {tag}
-                     <button
-                      type="button"
-                      onClick={() => handleTagRemove(tag)}
-                      className="hover:text-accent-danger"
-                    >
-                      <svg
-                        className="w-3 h-3"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
-                    </button>
-                  </span>
-                </Badge>
-              ))}
-              {filter.tags.length === 0 && (
-                <span className="text-text-muted text-sm">No tags selected</span>
-              )}
-            </div>
             <MultiSelect
               options={allTags.map((tag) => ({ value: tag, label: tag }))}
               value={filter.tags}
@@ -301,6 +293,7 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
               onClick={handleAdd}
               cyberBorder
               glow="strong"
+              className="h-[46px]"
             >
               Add Agent
             </Button>
@@ -332,114 +325,233 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
               )}
             </div>
           ) : (
-            <Grid columns="1" gap="lg" cyber>
+            <div className="rounded-cyber border border-accent-primary/20 overflow-hidden bg-panel/70">
+              <div className="hidden lg:grid grid-cols-[1.8fr_1.1fr_0.8fr] gap-4 px-5 py-3 bg-accent-primary/5 border-b border-accent-primary/20 text-[11px] font-bold tracking-[0.2em] uppercase text-text-secondary">
+                <span>Information</span>
+                <span>Tags & Models</span>
+                <span>Actions</span>
+              </div>
+
+              <div className="divide-y divide-accent-primary/10">
               {filteredAgents.map((agent) => (
-                <GridItem key={agent.id} span="1">
-                  <Card
-                     variant="cyber"
-                     interactive
-                     cyber
-                     glitchEffect
-                   >
-                     <div className="flex justify-between items-center mb-4">
-                       <Button
-                         variant="primary"
-                         size="sm"
-                         onClick={() => handleEdit(agent)}
-                       >
-                         Edit
-                       </Button>
-                       <Button
-                         variant="danger"
-                         size="sm"
-                         onClick={() => handleDelete(agent.id)}
-                       >
-                         Delete
-                       </Button>
-                     </div>
-                     <div className="flex flex-col gap-3">
-                      <div>
-                        <h4 className="text-lg font-bold text-accent-primary truncate">
-                          {agent.name}
-                        </h4>
-                        <p className="text-xs text-text-secondary break-all">
-                          ID: {agent.id}
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        {agent.tags.map((tag) => (
-                          <Badge key={tag} variant="cyber" size="sm">
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 text-xs">
+                <div
+                  key={agent.id}
+                  className="px-5 py-4 hover:bg-accent-primary/5 transition-colors"
+                >
+                  <div className="hidden lg:grid grid-cols-[1.8fr_1.1fr_0.8fr] gap-6 items-start">
+                    <div>
+                      <div className="flex items-start justify-between gap-4">
                         <div>
-                          <span className="text-text-muted block">Complexity</span>
-                          <span className="text-text-primary font-mono">
-                            {agent.complexityMin}-{agent.complexityMax}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-text-muted block">Tokens</span>
-                          <span className="text-text-primary font-mono">
-                            {agent.tokenProfile.typical}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-text-muted block">Timeout</span>
-                          <span className="text-text-primary">
-                            {(agent.timeoutMs / 1000).toFixed(1)}s
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-text-muted block">Retries</span>
-                          <span className="text-text-primary">
-                            {agent.maxRetries}
-                          </span>
-                        </div>
-                      </div>
-
-                      {agent.preferredModels &&
-                        agent.preferredModels.length > 0 && (
-                          <div>
-                            <span className="text-text-muted block text-xs">
-                              Preferred Models
-                            </span>
-                            <div className="flex flex-wrap gap-1">
-                              {agent.preferredModels.map((model) => (
-                                <Badge key={model} variant="cyber" size="sm">
-                                  {model}
-                                </Badge>
-                              ))}
-                            </div>
+                          <div className="text-sm font-semibold text-accent-primary">
+                            {agent.configSource === 'custom' ? 'CUSTOM' : 'STATIC'}
                           </div>
-                        )}
+                        </div>
+                        <div className="flex flex-wrap justify-end gap-1.5">
+                          <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] font-mono text-text-primary">
+                            complexity {agent.complexityMin}-{agent.complexityMax}
+                          </span>
+                          <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] font-mono text-text-primary">
+                            typical {agent.tokenProfile.typical}
+                          </span>
+                          <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] font-mono text-text-primary">
+                            {(agent.timeoutMs / 1000).toFixed(0)}s timeout
+                          </span>
+                          <span className="rounded-full border border-accent-secondary/20 bg-accent-secondary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-accent-secondary">
+                            {agent.maxRetries} retries
+                          </span>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide ${
+                              agent.isActive
+                                ? 'border border-accent-success/20 bg-accent-success/10 text-accent-success'
+                                : 'border border-accent-danger/20 bg-accent-danger/10 text-accent-danger'
+                            }`}
+                          >
+                            {formatAvailabilityLabel(agent.isActive)}
+                          </span>
+                        </div>
+                      </div>
 
-                      <div className="flex items-center gap-2 pt-2 border-t border-accent-primary/20">
-                        <StatusIndicator
-                          status={agent.isActive ? 'online' : 'offline'}
-                          showLabel
-                          label={agent.isActive ? 'Active' : 'Inactive'}
-                        />
-                        <Badge
-                          variant={
-                            agent.configSource === 'static'
-                              ? 'cyber'
-                              : 'cyber'
-                          }
-                          size="sm"
-                        >
-                          {agent.configSource}
-                        </Badge>
+                      <div className="mt-2 text-base font-bold text-text-primary break-all">
+                        {agent.name}
+                      </div>
+                      <div className="text-xs text-text-secondary mt-1 break-all">
+                        {agent.id}
+                      </div>
+                      {agent.description ? (
+                        <p className="mt-3 text-sm text-text-secondary leading-relaxed">
+                          {agent.description}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <div className="text-[11px] uppercase tracking-wide text-text-muted mb-2">
+                          Tags
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {agent.tags.length === 0 ? (
+                            <span className="text-xs text-text-muted">No tags</span>
+                          ) : (
+                            agent.tags.map((tag) => (
+                              <span
+                                key={tag}
+                                className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] text-accent-primary"
+                              >
+                                {tag}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-[11px] uppercase tracking-wide text-text-muted mb-2">
+                          Preferred Models
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {agent.preferredModels && agent.preferredModels.length > 0 ? (
+                            agent.preferredModels.map((model) => (
+                              <span
+                                key={model}
+                                className="rounded-full border border-accent-secondary/20 bg-accent-secondary/10 px-2 py-0.5 text-[10px] text-accent-secondary"
+                              >
+                                {model}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-xs text-text-muted">No preferred models</span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </Card>
-                </GridItem>
+
+                    <div className="flex flex-col items-stretch gap-2">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => handleEdit(agent)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => handleDelete(agent.id)}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="lg:hidden space-y-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-semibold text-accent-primary">
+                          {agent.configSource === 'custom' ? 'CUSTOM' : 'STATIC'}
+                        </div>
+                        <div className="text-base font-bold text-text-primary mt-1 break-all">
+                          {agent.name}
+                        </div>
+                        <div className="text-xs text-text-secondary mt-1 break-all">
+                          {agent.id}
+                        </div>
+                      </div>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide ${
+                          agent.isActive
+                            ? 'border border-accent-success/20 bg-accent-success/10 text-accent-success'
+                            : 'border border-accent-danger/20 bg-accent-danger/10 text-accent-danger'
+                        }`}
+                      >
+                        {formatAvailabilityLabel(agent.isActive)}
+                      </span>
+                    </div>
+
+                    {agent.description ? (
+                      <p className="text-sm text-text-secondary leading-relaxed">
+                        {agent.description}
+                      </p>
+                    ) : null}
+
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] font-mono text-text-primary">
+                        complexity {agent.complexityMin}-{agent.complexityMax}
+                      </span>
+                      <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] font-mono text-text-primary">
+                        typical {agent.tokenProfile.typical}
+                      </span>
+                      <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] font-mono text-text-primary">
+                        {(agent.timeoutMs / 1000).toFixed(0)}s timeout
+                      </span>
+                      <span className="rounded-full border border-accent-secondary/20 bg-accent-secondary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-accent-secondary">
+                        {agent.maxRetries} retries
+                      </span>
+                    </div>
+
+                    <div>
+                      <div className="text-[11px] uppercase tracking-wide text-text-muted mb-2">
+                        Tags
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {agent.tags.length === 0 ? (
+                          <span className="text-xs text-text-muted">No tags</span>
+                        ) : (
+                          agent.tags.map((tag) => (
+                            <span
+                              key={tag}
+                              className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] text-accent-primary"
+                            >
+                              {tag}
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-[11px] uppercase tracking-wide text-text-muted mb-2">
+                        Preferred Models
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {agent.preferredModels && agent.preferredModels.length > 0 ? (
+                          agent.preferredModels.map((model) => (
+                            <span
+                              key={model}
+                              className="rounded-full border border-accent-secondary/20 bg-accent-secondary/10 px-2 py-0.5 text-[10px] text-accent-secondary"
+                            >
+                              {model}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-text-muted">No preferred models</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => handleEdit(agent)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => handleDelete(agent.id)}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               ))}
-            </Grid>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -447,6 +559,7 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
       {showForm && (
         <AgentForm
           agent={editingAgent}
+          availableModels={models}
           onSubmit={handleFormSubmit}
           onCancel={handleFormCancel}
         />

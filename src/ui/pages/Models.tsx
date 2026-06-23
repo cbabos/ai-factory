@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Panel } from '../components/layout/Panel.js';
 import { Button } from '../components/common/Button.js';
 import { Select } from '../components/forms/Select.js';
-import { StatusIndicator } from '../components/ui/StatusIndicator.js';
 import { ModelForm } from './ModelForm.js';
 import type { Provider } from '../../core/types.js';
 import { apiClient, type ModelMutationInput, type ModelRecord } from '../services/index.js';
@@ -28,6 +27,10 @@ export interface ModelsPageProps {
 
 const formatCost = (value: number): string => {
   return `$${value.toFixed(4)}`;
+};
+
+const formatSourceLabel = (configSource: ModelRecord['configSource']): string => {
+  return configSource === 'discovered' ? 'discovered' : 'configured';
 };
 
 const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
@@ -173,7 +176,7 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
       cyber
       className={className}
     >
-      <div className="flex flex-col sm:flex-row gap-4 mb-6 items-center justify-between">
+      <div className="flex flex-col sm:flex-row gap-4 mb-6 items-end justify-between">
         <div className="flex flex-wrap gap-3 w-full sm:w-auto">
           <div className="w-full sm:w-48">
             <Select
@@ -199,7 +202,7 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
             />
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-end gap-2">
           <Button
             variant="primary"
             onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
@@ -251,15 +254,10 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
         </div>
       ) : (
         <div className="rounded-cyber border border-accent-primary/20 overflow-hidden bg-panel/70">
-          <div className="hidden lg:grid grid-cols-[1.1fr_1.4fr_0.8fr_0.9fr_1.2fr_0.8fr_0.8fr_1fr] gap-4 px-5 py-3 bg-accent-primary/5 border-b border-accent-primary/20 text-[11px] font-bold tracking-[0.2em] uppercase text-text-secondary">
-            <span>Provider</span>
-            <span>Model</span>
-            <span>Input</span>
-            <span>Output</span>
+          <div className="hidden lg:grid grid-cols-[1.8fr_1.2fr_0.8fr] gap-4 px-5 py-3 bg-accent-primary/5 border-b border-accent-primary/20 text-[11px] font-bold tracking-[0.2em] uppercase text-text-secondary">
+            <span>Information</span>
             <span>Capabilities</span>
-            <span>Tokens</span>
-            <span>Source</span>
-            <span>Status</span>
+            <span>Actions</span>
           </div>
 
           <div className="divide-y divide-accent-primary/10">
@@ -268,41 +266,63 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
                 key={model.id}
                 className="px-5 py-4 hover:bg-accent-primary/5 transition-colors"
               >
-                <div className="hidden lg:grid grid-cols-[1.1fr_1.4fr_0.8fr_0.9fr_1.2fr_0.8fr_0.8fr_1fr] gap-4 items-start">
+                <div className="hidden lg:grid grid-cols-[1.8fr_1.2fr_0.8fr] gap-6 items-start">
                   <div>
-                    <div className="text-sm font-semibold text-accent-primary">
-                      {model.provider.toUpperCase()}
-                    </div>
-                    <div className="text-xs text-text-muted mt-1">
-                      {model.ownedBy || 'Unowned'}
-                    </div>
-                  </div>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-semibold text-accent-primary">
+                          {model.provider.toUpperCase()}
+                        </div>
+                      </div>
 
-                  <div>
-                    <div className="text-sm font-semibold text-text-primary break-all">
+                      <div className="flex flex-wrap justify-end gap-1.5">
+                        <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] font-mono text-text-primary">
+                          in {formatCost(model.costPer1kInput)}
+                        </span>
+                        <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] font-mono text-text-primary">
+                          out {formatCost(model.costPer1kOutput)}
+                        </span>
+                        <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] font-mono text-text-primary">
+                          {model.maxTokens.toLocaleString()} tokens
+                        </span>
+                        <span className="rounded-full border border-accent-secondary/20 bg-accent-secondary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-accent-secondary">
+                          {formatSourceLabel(model.configSource)}
+                        </span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide ${
+                            model.isActive
+                              ? 'border border-accent-success/20 bg-accent-success/10 text-accent-success'
+                              : 'border border-accent-danger/20 bg-accent-danger/10 text-accent-danger'
+                          }`}
+                        >
+                          {model.isActive ? 'enabled' : 'disabled'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 text-base font-bold text-text-primary break-all">
                       {model.modelId}
                     </div>
                     <div className="text-xs text-text-secondary mt-1">
-                      {model.id}
+                      {model.ownedBy || 'Unowned'}
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between gap-3 text-xs text-text-secondary">
+                      <span className="break-all">{model.id}</span>
+                      {model.discoveredAt ? (
+                        <span>{new Date(model.discoveredAt).toLocaleDateString()}</span>
+                      ) : null}
                     </div>
                   </div>
 
-                  <div className="text-sm text-text-primary font-mono">
-                    {formatCost(model.costPer1kInput)}
-                  </div>
-
-                  <div className="text-sm text-text-primary font-mono">
-                    {formatCost(model.costPer1kOutput)}
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex min-h-9 flex-wrap items-start gap-1.5" title={model.capabilities.join(', ')}>
                     {model.capabilities.length === 0 ? (
                       <span className="text-xs text-text-muted">No capabilities</span>
                     ) : (
                       model.capabilities.map((capability) => (
                         <span
                           key={capability}
-                          className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-1 text-[11px] text-accent-primary"
+                          className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] text-accent-primary"
                         >
                           {capability}
                         </span>
@@ -310,47 +330,21 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
                     )}
                   </div>
 
-                  <div>
-                    <div className="text-sm text-text-primary font-mono">
-                      {model.maxTokens.toLocaleString()}
-                    </div>
-                    <div className="text-xs text-text-secondary mt-1">
-                      max tokens
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-text-primary">
-                      {model.configSource}
-                    </div>
-                    {model.discoveredAt ? (
-                      <div className="text-xs text-text-secondary mt-1">
-                        {new Date(model.discoveredAt).toLocaleDateString()}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <div className="flex flex-col items-start gap-3">
-                    <StatusIndicator
-                      status={model.isActive ? 'online' : 'offline'}
-                      showLabel
-                    />
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => handleEdit(model)}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        onClick={() => handleDeleteClick(model)}
-                      >
-                        Delete
-                      </Button>
-                    </div>
+                  <div className="flex flex-col items-stretch gap-2">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => handleEdit(model)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => handleDeleteClick(model)}
+                    >
+                      Delete
+                    </Button>
                   </div>
                 </div>
 
@@ -367,33 +361,42 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
                         {model.ownedBy || 'Unowned'} · {model.maxTokens.toLocaleString()} tokens
                       </div>
                     </div>
-                    <StatusIndicator
-                      status={model.isActive ? 'online' : 'offline'}
-                      showLabel
-                    />
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide ${
+                        model.isActive
+                          ? 'border border-accent-success/20 bg-accent-success/10 text-accent-success'
+                          : 'border border-accent-danger/20 bg-accent-danger/10 text-accent-danger'
+                      }`}
+                    >
+                      {model.isActive ? 'enabled' : 'disabled'}
+                    </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-cyber border border-accent-primary/10 bg-accent-primary/5 px-3 py-2">
-                      <div className="text-[11px] uppercase tracking-wide text-text-muted">Input</div>
-                      <div className="mt-1 font-mono text-text-primary">{formatCost(model.costPer1kInput)}</div>
-                    </div>
-                    <div className="rounded-cyber border border-accent-primary/10 bg-accent-primary/5 px-3 py-2">
-                      <div className="text-[11px] uppercase tracking-wide text-text-muted">Output</div>
-                      <div className="mt-1 font-mono text-text-primary">{formatCost(model.costPer1kOutput)}</div>
-                    </div>
+                  <div className="flex flex-wrap gap-1.5 text-sm">
+                      <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] font-mono text-text-primary">
+                        in {formatCost(model.costPer1kInput)}
+                      </span>
+                      <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] font-mono text-text-primary">
+                        out {formatCost(model.costPer1kOutput)}
+                      </span>
+                      <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] font-mono text-text-primary">
+                        {model.maxTokens.toLocaleString()} tokens
+                      </span>
+                      <span className="rounded-full border border-accent-secondary/20 bg-accent-secondary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-accent-secondary">
+                        {formatSourceLabel(model.configSource)}
+                      </span>
                   </div>
 
                   <div>
                     <div className="text-[11px] uppercase tracking-wide text-text-muted mb-2">Capabilities</div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-1.5" title={model.capabilities.join(', ')}>
                       {model.capabilities.length === 0 ? (
                         <span className="text-xs text-text-muted">No capabilities</span>
                       ) : (
                         model.capabilities.map((capability) => (
                           <span
                             key={capability}
-                            className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-1 text-[11px] text-accent-primary"
+                            className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] text-accent-primary"
                           >
                             {capability}
                           </span>
@@ -403,8 +406,10 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
                   </div>
 
                   <div className="flex items-center justify-between gap-3 text-xs text-text-secondary">
-                    <span>Source: {model.configSource}</span>
-                    <span>{model.discoveredAt ? new Date(model.discoveredAt).toLocaleDateString() : 'No discovery date'}</span>
+                    <span className="break-all">{model.id}</span>
+                    {model.discoveredAt ? (
+                      <span>{new Date(model.discoveredAt).toLocaleDateString()}</span>
+                    ) : null}
                   </div>
 
                   <div className="flex items-center gap-2">

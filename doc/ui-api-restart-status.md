@@ -40,6 +40,7 @@ Restart the UI shell and API integration cleanly while preserving the reusable t
 - Models UI now reads provider choices from runtime model data and constrains model IDs to the selected provider's discovered/configured catalog
 - Runtime model discovery now persists newly discovered models into the editable model store for UI consumption
 - Models screen now uses a table-first management view so provider, model ID, costs, capabilities, source, and status are visible at a glance
+- Agents CRUD form now generates IDs from names, uses runtime model choices, removes derived/noisy fields, and exposes prompt/config metadata in a concise editor
 
 ### In Progress
 
@@ -50,5 +51,6 @@ Restart the UI shell and API integration cleanly while preserving the reusable t
 - Root repo lint still has pre-existing non-UI failures in the core/api work
 - The factory still loads `factory.config.json` as the bootstrap seed for persisted entities and provider setup
 - Task detail/subtask browsing is still incomplete
+- Agent prompt/config metadata is persisted by the UI/API but is not yet consumed by runtime agent execution
 - The runtime only serves the UI after `src/ui` has been built to `src/ui/dist`
 - Legacy generated component/page tests remain out of scope until they are rewritten against the actual rendered UI contracts

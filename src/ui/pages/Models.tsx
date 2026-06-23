@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Panel } from '../components/layout/Panel.js';
-import { Grid, GridItem } from '../components/layout/Grid.js';
-import { Card } from '../components/layout/Card.js';
 import { Button } from '../components/common/Button.js';
 import { Select } from '../components/forms/Select.js';
 import { StatusIndicator } from '../components/ui/StatusIndicator.js';
@@ -27,6 +25,10 @@ export interface ModelFormState {
 export interface ModelsPageProps {
   className?: string;
 }
+
+const formatCost = (value: number): string => {
+  return `$${value.toFixed(4)}`;
+};
 
 const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
   const [models, setModels] = useState<ModelRecord[]>([]);
@@ -248,49 +250,186 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
           </Button>
         </div>
       ) : (
-        <Grid columns="1" gap="lg" cyber>
-          {sortedModels.map((model) => (
-            <GridItem key={model.id} span="1">
-              <Card
-                title={model.modelId}
-                subtitle={`${model.provider.toUpperCase()} - ${model.isActive ? 'Online' : 'Offline'}`}
-                variant="cyber"
-                interactive
-                cyber
-                size="md"
-                padding="lg"
+        <div className="rounded-cyber border border-accent-primary/20 overflow-hidden bg-panel/70">
+          <div className="hidden lg:grid grid-cols-[1.1fr_1.4fr_0.8fr_0.9fr_1.2fr_0.8fr_0.8fr_1fr] gap-4 px-5 py-3 bg-accent-primary/5 border-b border-accent-primary/20 text-[11px] font-bold tracking-[0.2em] uppercase text-text-secondary">
+            <span>Provider</span>
+            <span>Model</span>
+            <span>Input</span>
+            <span>Output</span>
+            <span>Capabilities</span>
+            <span>Tokens</span>
+            <span>Source</span>
+            <span>Status</span>
+          </div>
+
+          <div className="divide-y divide-accent-primary/10">
+            {sortedModels.map((model) => (
+              <div
+                key={model.id}
+                className="px-5 py-4 hover:bg-accent-primary/5 transition-colors"
               >
-                <div className="flex items-center gap-2 w-full">
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    className="flex-1"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEdit(model);
-                    }}
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    className="flex-1"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteClick(model);
-                    }}
-                  >
-                    Delete
-                  </Button>
+                <div className="hidden lg:grid grid-cols-[1.1fr_1.4fr_0.8fr_0.9fr_1.2fr_0.8fr_0.8fr_1fr] gap-4 items-start">
+                  <div>
+                    <div className="text-sm font-semibold text-accent-primary">
+                      {model.provider.toUpperCase()}
+                    </div>
+                    <div className="text-xs text-text-muted mt-1">
+                      {model.ownedBy || 'Unowned'}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-sm font-semibold text-text-primary break-all">
+                      {model.modelId}
+                    </div>
+                    <div className="text-xs text-text-secondary mt-1">
+                      {model.id}
+                    </div>
+                  </div>
+
+                  <div className="text-sm text-text-primary font-mono">
+                    {formatCost(model.costPer1kInput)}
+                  </div>
+
+                  <div className="text-sm text-text-primary font-mono">
+                    {formatCost(model.costPer1kOutput)}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {model.capabilities.length === 0 ? (
+                      <span className="text-xs text-text-muted">No capabilities</span>
+                    ) : (
+                      model.capabilities.map((capability) => (
+                        <span
+                          key={capability}
+                          className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-1 text-[11px] text-accent-primary"
+                        >
+                          {capability}
+                        </span>
+                      ))
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="text-sm text-text-primary font-mono">
+                      {model.maxTokens.toLocaleString()}
+                    </div>
+                    <div className="text-xs text-text-secondary mt-1">
+                      max tokens
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-text-primary">
+                      {model.configSource}
+                    </div>
+                    {model.discoveredAt ? (
+                      <div className="text-xs text-text-secondary mt-1">
+                        {new Date(model.discoveredAt).toLocaleDateString()}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="flex flex-col items-start gap-3">
+                    <StatusIndicator
+                      status={model.isActive ? 'online' : 'offline'}
+                      showLabel
+                    />
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => handleEdit(model)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => handleDeleteClick(model)}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-                <div className="mt-2">
-                  <StatusIndicator status={model.isActive ? 'online' : 'offline'} showLabel />
+
+                <div className="lg:hidden space-y-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-semibold text-accent-primary">
+                        {model.provider.toUpperCase()}
+                      </div>
+                      <div className="text-base font-bold text-text-primary break-all mt-1">
+                        {model.modelId}
+                      </div>
+                      <div className="text-xs text-text-secondary mt-1">
+                        {model.ownedBy || 'Unowned'} · {model.maxTokens.toLocaleString()} tokens
+                      </div>
+                    </div>
+                    <StatusIndicator
+                      status={model.isActive ? 'online' : 'offline'}
+                      showLabel
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-cyber border border-accent-primary/10 bg-accent-primary/5 px-3 py-2">
+                      <div className="text-[11px] uppercase tracking-wide text-text-muted">Input</div>
+                      <div className="mt-1 font-mono text-text-primary">{formatCost(model.costPer1kInput)}</div>
+                    </div>
+                    <div className="rounded-cyber border border-accent-primary/10 bg-accent-primary/5 px-3 py-2">
+                      <div className="text-[11px] uppercase tracking-wide text-text-muted">Output</div>
+                      <div className="mt-1 font-mono text-text-primary">{formatCost(model.costPer1kOutput)}</div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide text-text-muted mb-2">Capabilities</div>
+                    <div className="flex flex-wrap gap-2">
+                      {model.capabilities.length === 0 ? (
+                        <span className="text-xs text-text-muted">No capabilities</span>
+                      ) : (
+                        model.capabilities.map((capability) => (
+                          <span
+                            key={capability}
+                            className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-1 text-[11px] text-accent-primary"
+                          >
+                            {capability}
+                          </span>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 text-xs text-text-secondary">
+                    <span>Source: {model.configSource}</span>
+                    <span>{model.discoveredAt ? new Date(model.discoveredAt).toLocaleDateString() : 'No discovery date'}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => handleEdit(model)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => handleDeleteClick(model)}
+                    >
+                      Delete
+                    </Button>
+                  </div>
                 </div>
-              </Card>
-            </GridItem>
-          ))}
-        </Grid>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {isFormOpen && (

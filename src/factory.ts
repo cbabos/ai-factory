@@ -224,6 +224,7 @@ export class AIFactory {
         modelId: e.discovered.modelId,
         ownedBy: e.discovered.ownedBy,
       }));
+      this.persistDiscoveredModels(discovered);
       this.logger.info(`Discovered ${discovered.length} model(s): ${discovered.map((m) => `${m.provider}:${m.modelId}`).join(", ") || "none"}`);
     } catch (err) {
       this.logger.warn(
@@ -536,6 +537,34 @@ export class AIFactory {
       }));
 
     return storedModels.length > 0 ? storedModels : fallbackModels;
+  }
+
+  private persistDiscoveredModels(
+    discovered: { provider: string; modelId: string; ownedBy?: string }[],
+  ): void {
+    if (!this.modelStore) {
+      return;
+    }
+
+    const discoveredAt = Date.now();
+
+    for (const model of discovered) {
+      if (this.modelStore.get(model.provider, model.modelId)) {
+        continue;
+      }
+
+      this.modelStore.save({
+        provider: model.provider,
+        modelId: model.modelId,
+        maxTokens: 4096,
+        costPer1kInput: 0.001,
+        costPer1kOutput: 0.001,
+        capabilities: ["analysis"],
+        ownedBy: model.ownedBy,
+        configSource: "discovered",
+        discoveredAt,
+      });
+    }
   }
 
   private buildAgents(

@@ -74,6 +74,7 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
       helpText,
       error,
       options = [],
+      onChange,
       startIcon,
       cyrillicArrow = true,
       cyberBorder,
@@ -84,9 +85,17 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
     }
   ) => {
     const [isOpen, setIsOpen] = useState(false);
-    const [selectedValue, setSelectedValue] = useState<string | null>(null);
+    const [selectedValue, setSelectedValue] = useState<string>(
+      typeof props.value === 'string' ? props.value : '',
+    );
     const dropdownRef = useRef<HTMLDivElement>(null);
     const selectRef = useRef<HTMLSelectElement>(null);
+
+    useEffect(() => {
+      if (typeof props.value === 'string') {
+        setSelectedValue(props.value);
+      }
+    }, [props.value]);
 
     // Handle click outside to close dropdown
     useEffect(() => {
@@ -107,11 +116,16 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
     const handleSelectChange = (value: string) => {
       setSelectedValue(value);
       setIsOpen(false);
-      
-      // Dispatch custom event for outer handling
+
       if (selectRef.current) {
-        const event = new Event('change', { bubbles: true });
-        void selectRef.current.dispatchEvent(event);
+        selectRef.current.value = value;
+      }
+
+      if (onChange && selectRef.current) {
+        onChange({
+          target: selectRef.current,
+          currentTarget: selectRef.current,
+        } as React.ChangeEvent<HTMLSelectElement>);
       }
     };
 
@@ -219,7 +233,7 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
           <select
             ref={selectRef}
             className="hidden"
-            value={selectedValue || ''}
+            value={selectedValue}
             onChange={(e) => handleSelectChange(e.target.value)}
             {...props}
           />

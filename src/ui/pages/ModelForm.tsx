@@ -5,17 +5,6 @@ import { Button } from '../components/common/Button.js';
 import type { Provider } from '../../core/types.js';
 import type { ModelRecord } from '../services/index.js';
 
-const PROVIDER_OPTIONS: { value: Provider; label: string }[] = [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'google', label: 'Google' },
-  { value: 'ollama', label: 'Ollama' },
-  { value: 'openrouter', label: 'OpenRouter' },
-  { value: 'mistral', label: 'Mistral' },
-  { value: 'groq', label: 'Groq' },
-  { value: 'deepseek', label: 'Deepseek' },
-];
-
 interface ModelFormState {
   provider: Provider;
   modelId: string;
@@ -42,14 +31,42 @@ const defaultState: ModelFormState = {
 
 export interface ModelFormProps {
   model?: ModelRecord | null;
+  availableModels: ModelRecord[];
   onClose: () => void;
   onSubmit: (modelData: Partial<ModelFormState>) => void;
 }
 
-export const ModelForm: React.FC<ModelFormProps> = ({ model, onClose, onSubmit }) => {
+export const ModelForm: React.FC<ModelFormProps> = ({
+  model,
+  availableModels,
+  onClose,
+  onSubmit,
+}) => {
   const [formData, setFormData] = useState<ModelFormState>(defaultState);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const providerOptions = Array.from(new Set(availableModels.map((availableModel) => availableModel.provider)))
+    .sort((left, right) => left.localeCompare(right))
+    .map((provider) => ({
+      value: provider,
+      label: provider.toUpperCase(),
+    }));
+
+  const availableModelOptions = Array.from(
+    new Map(
+      availableModels
+        .filter((availableModel) => availableModel.provider === formData.provider)
+        .sort((left, right) => left.modelId.localeCompare(right.modelId))
+        .map((availableModel) => [
+          availableModel.modelId,
+          {
+            value: availableModel.modelId,
+            label: availableModel.modelId,
+          },
+        ]),
+    ).values(),
+  );
 
   useEffect(() => {
     if (model) {
@@ -65,8 +82,29 @@ export const ModelForm: React.FC<ModelFormProps> = ({ model, onClose, onSubmit }
         version: model.version !== undefined ? String(model.version) : undefined,
         configSource: model.configSource || 'static',
       });
+      return;
     }
-  }, [model]);
+
+    if (providerOptions.length > 0) {
+      setFormData((previous) => ({
+        ...previous,
+        provider: providerOptions[0]!.value as Provider,
+      }));
+    }
+  }, [model, providerOptions]);
+
+  useEffect(() => {
+    if (availableModelOptions.length === 0) {
+      return;
+    }
+
+    if (!availableModelOptions.some((option) => option.value === formData.modelId)) {
+      setFormData((previous) => ({
+        ...previous,
+        modelId: availableModelOptions[0]!.value,
+      }));
+    }
+  }, [availableModelOptions, formData.modelId]);
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -153,18 +191,19 @@ export const ModelForm: React.FC<ModelFormProps> = ({ model, onClose, onSubmit }
           <Select
             label="Provider"
             value={formData.provider}
-            options={PROVIDER_OPTIONS}
+            options={providerOptions}
             onChange={(e) => handleChange('provider', e.target.value as Provider)}
             error={errors.provider}
             cyberBorder
           />
 
-          <Input
+          <Select
             label="Model ID"
             value={formData.modelId}
             onChange={(e) => handleChange('modelId', e.target.value)}
+            options={availableModelOptions}
             error={errors.modelId}
-            placeholder="e.g., gpt-4, claude-3-opus"
+            helpText="Auto-discovered models for the selected provider."
             cyberBorder
           />
 

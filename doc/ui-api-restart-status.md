@@ -37,6 +37,8 @@ Restart the UI shell and API integration cleanly while preserving the reusable t
 - Runtime startup now seeds persisted agent/model records from config and prefers the editable stores on boot
 - API runtime now serves the built `src/ui/dist` bundle when it exists and falls back to `index.html` for client routes
 - Vitest now targets a smaller trusted UI contract suite focused on theme config, route contracts, and shared API client behavior
+- Models UI now reads provider choices from runtime model data and constrains model IDs to the selected provider's discovered/configured catalog
+- Runtime model discovery now persists newly discovered models into the editable model store for UI consumption
 
 ### In Progress
 

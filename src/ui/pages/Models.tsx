@@ -9,17 +9,6 @@ import { ModelForm } from './ModelForm.js';
 import type { Provider } from '../../core/types.js';
 import { apiClient, type ModelMutationInput, type ModelRecord } from '../services/index.js';
 
-const PROVIDER_OPTIONS: { value: Provider; label: string }[] = [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'google', label: 'Google' },
-  { value: 'ollama', label: 'Ollama' },
-  { value: 'openrouter', label: 'OpenRouter' },
-  { value: 'mistral', label: 'Mistral' },
-  { value: 'groq', label: 'Groq' },
-  { value: 'deepseek', label: 'Deepseek' },
-];
-
 export interface Model extends ModelRecord {}
 
 export interface ModelFormState {
@@ -91,7 +80,29 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
   const handleUpdate = async (modelData: Partial<ModelMutationInput>) => {
     if (!editingModel) return;
     try {
-      await apiClient.updateModel(editingModel.provider, editingModel.modelId, modelData);
+      const nextProvider = modelData.provider ?? editingModel.provider;
+      const nextModelId = modelData.modelId ?? editingModel.modelId;
+
+      if (
+        nextProvider !== editingModel.provider ||
+        nextModelId !== editingModel.modelId
+      ) {
+        await apiClient.createModel({
+          provider: nextProvider,
+          modelId: nextModelId,
+          maxTokens: modelData.maxTokens ?? editingModel.maxTokens,
+          costPer1kInput: modelData.costPer1kInput ?? editingModel.costPer1kInput,
+          costPer1kOutput: modelData.costPer1kOutput ?? editingModel.costPer1kOutput,
+          capabilities: modelData.capabilities ?? editingModel.capabilities,
+          ownedBy: modelData.ownedBy ?? editingModel.ownedBy,
+          isActive: modelData.isActive ?? editingModel.isActive,
+          configSource: modelData.configSource ?? editingModel.configSource,
+          discoveredAt: modelData.discoveredAt ?? editingModel.discoveredAt,
+        });
+        await apiClient.deleteModel(editingModel.provider, editingModel.modelId);
+      } else {
+        await apiClient.updateModel(editingModel.provider, editingModel.modelId, modelData);
+      }
       await loadModels();
       setEditingModel(null);
       setIsFormOpen(false);
@@ -114,6 +125,13 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
   const filteredModels = models.filter((model) =>
     filterProvider === 'all' ? true : model.provider === filterProvider
   );
+
+  const providerOptions = Array.from(new Set(models.map((model) => model.provider)))
+    .sort((left, right) => left.localeCompare(right))
+    .map((provider) => ({
+      value: provider,
+      label: provider.toUpperCase(),
+    }));
 
   const sortedModels = [...filteredModels].sort((a, b) => {
     const multiplier = sortOrder === 'asc' ? 1 : -1;
@@ -161,7 +179,7 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
               value={filterProvider}
               options={[
                 { value: 'all', label: 'All Providers' },
-                ...PROVIDER_OPTIONS,
+                ...providerOptions,
               ]}
               onChange={(e) => setFilterProvider(e.target.value as Provider | 'all')}
             />
@@ -278,6 +296,7 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
       {isFormOpen && (
         <ModelForm
           model={editingModel}
+          availableModels={models}
           onClose={() => {
             setIsFormOpen(false);
             setEditingModel(null);

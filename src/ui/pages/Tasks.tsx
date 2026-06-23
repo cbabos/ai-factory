@@ -11,6 +11,8 @@ import {
   type TaskListItem,
 } from '../services/index.js';
 
+const TASK_POLL_INTERVAL_MS = 5000;
+
 const statusOptions = [
   { value: 'all', label: 'All Status' },
   { value: 'pending', label: 'Pending' },
@@ -49,7 +51,8 @@ export default function Tasks() {
   const pageSize = 20;
 
   const fetchTasks = useCallback(async (page: number = 1) => {
-    setLoading(true);
+    setLoading(tasks.length === 0);
+    setError(null);
     try {
       const data = await apiClient.listTasks({
         page,
@@ -70,18 +73,21 @@ export default function Tasks() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, priorityFilter, searchTerm]);
+  }, [priorityFilter, searchTerm, statusFilter, tasks.length]);
 
   useEffect(() => {
-    fetchTasks(1);
+    void fetchTasks(1);
   }, [fetchTasks]);
 
   useEffect(() => {
-    const status = searchParams.get('status');
-    if (status !== statusFilter) {
-      fetchTasks(1);
-    }
-  }, [searchParams, statusFilter, fetchTasks]);
+    const pollId = window.setInterval(() => {
+      void fetchTasks(currentPage);
+    }, TASK_POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(pollId);
+    };
+  }, [currentPage, fetchTasks]);
 
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= totalPages) {
@@ -90,37 +96,39 @@ export default function Tasks() {
   };
 
   const handleStatusChange = (value: string) => {
+    const nextSearchParams = new URLSearchParams(searchParams);
     if (value === 'all') {
-      searchParams.delete('status');
+      nextSearchParams.delete('status');
     } else {
-      searchParams.set('status', value);
+      nextSearchParams.set('status', value);
     }
-    setSearchParams(searchParams);
+    setSearchParams(nextSearchParams);
   };
 
   const handlePriorityChange = (value: string) => {
+    const nextSearchParams = new URLSearchParams(searchParams);
     if (value === 'all') {
-      searchParams.delete('priority');
+      nextSearchParams.delete('priority');
     } else {
-      searchParams.set('priority', value);
+      nextSearchParams.set('priority', value);
     }
-    setSearchParams(searchParams);
+    setSearchParams(nextSearchParams);
   };
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
+    const nextSearchParams = new URLSearchParams(searchParams);
     setSearchTerm(value);
     if (value) {
-      searchParams.set('search', value);
+      nextSearchParams.set('search', value);
     } else {
-      searchParams.delete('search');
+      nextSearchParams.delete('search');
     }
-    setSearchParams(searchParams);
-    fetchTasks(1);
+    setSearchParams(nextSearchParams);
   };
 
   const handleRefresh = () => {
-    fetchTasks(currentPage);
+    void fetchTasks(currentPage);
   };
 
   if (loading && tasks.length === 0) {
@@ -218,10 +226,12 @@ export default function Tasks() {
               <p className="text-text-secondary">No tasks match your filters</p>
               <button
                 onClick={() => {
-                  searchParams.delete('status');
-                  searchParams.delete('priority');
-                  searchParams.delete('search');
-                  setSearchParams(searchParams);
+                  const nextSearchParams = new URLSearchParams(searchParams);
+                  nextSearchParams.delete('status');
+                  nextSearchParams.delete('priority');
+                  nextSearchParams.delete('search');
+                  setSearchParams(nextSearchParams);
+                  setSearchTerm('');
                 }}
                 className="mt-4 text-accent-primary hover:text-accent-secondary transition-colors"
               >

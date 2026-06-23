@@ -1,8 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Card } from '../components/layout/Card.js';
 import { Panel } from '../components/layout/Panel.js';
 import { apiClient, type TaskDetails as TaskDetailsRecord } from '../services/index.js';
+
+const TASK_DETAILS_POLL_INTERVAL_MS = 5000;
 
 const TaskDetailsPage: React.FC = () => {
   const { taskId } = useParams();
@@ -11,21 +15,39 @@ const TaskDetailsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const loadTask = useCallback(async () => {
+    if (!taskId) {
+      return;
+    }
+
+    try {
+      setLoading((currentLoading) => currentLoading || task === null);
+      setTask(await apiClient.getTask(taskId));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load task');
+    } finally {
+      setLoading(false);
+    }
+  }, [task, taskId]);
+
   useEffect(() => {
-    if (!taskId) return;
-    const load = async () => {
-      try {
-        setLoading(true);
-        setTask(await apiClient.getTask(taskId));
-        setError(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load task');
-      } finally {
-        setLoading(false);
-      }
+    void loadTask();
+  }, [loadTask]);
+
+  useEffect(() => {
+    if (!taskId) {
+      return;
+    }
+
+    const pollId = window.setInterval(() => {
+      void loadTask();
+    }, TASK_DETAILS_POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(pollId);
     };
-    void load();
-  }, [taskId]);
+  }, [loadTask, taskId]);
 
   if (loading) {
     return <Panel title="Task Details">Loading task thread...</Panel>;
@@ -82,9 +104,11 @@ const TaskDetailsPage: React.FC = () => {
                     {new Date(turn.timestamp).toLocaleString()}
                   </span>
                 </div>
-                <pre className="whitespace-pre-wrap text-sm text-text-primary font-sans">
-                  {turn.content}
-                </pre>
+                <div className="prose prose-invert max-w-none text-sm text-text-primary prose-pre:bg-panel/70 prose-pre:border prose-pre:border-accent-primary/20 prose-code:text-accent-secondary prose-headings:text-accent-primary prose-strong:text-text-primary prose-a:text-accent-secondary">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {turn.content}
+                  </ReactMarkdown>
+                </div>
               </Card>
             ))
           )}

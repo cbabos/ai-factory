@@ -16,7 +16,8 @@ Restart the UI shell and API integration cleanly while preserving the reusable t
 - [x] Introduce shared UI-facing API DTOs/client helpers
 - [x] Rewire `Agents`, `Models`, and `Tasks` pages to the shared client layer
 - [x] Add task detail viewing and conversation rendering
-- [ ] Align backend API DTOs with the UI contract
+- [x] Align backend API DTOs with the UI contract
+- [x] Add live task polling and markdown conversation rendering
 - [ ] Finish backend runtime wiring for editable entities
 - [ ] Serve the built UI from the factory runtime
 - [ ] Restore trustworthy UI tests around the rebuilt shell and client layer
@@ -32,16 +33,16 @@ Restart the UI shell and API integration cleanly while preserving the reusable t
 - Local UI package checks currently pass:
   - `cd src/ui && npm run typecheck`
   - `cd src/ui && npm run lint`
+- Backend task/agent wiring now reaches the API server through initialized stores/repositories
 
 ### In Progress
 
-- Aligning backend API DTOs with the UI contract so the frontend no longer needs endpoint-specific payload transforms
-- Planning the next pass on task detail rendering, including markdown/HTML conversation rendering and subtask drill-down
+- Finishing the runtime move away from static `factory.config.json` entities toward editable persisted state
+- Planning the next pass on task detail UX, especially subtask drill-down and richer thread metadata
 
 ### Known Gaps
 
 - Root repo lint still has pre-existing non-UI failures in the core/api work
 - The factory still loads `factory.config.json` for runtime entities
 - Task detail/subtask browsing is still incomplete
-- Task conversations are currently shown as plain text, not rendered markdown/HTML yet
 - Static serving of the built UI is not wired into the runtime yet

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTheme } from '../hooks/useTheme.js';
+import type { ThemeId } from '../types.js';
 
 export interface ThemeSwitcherProps {
   showLabel?: boolean;
@@ -22,7 +23,7 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({
   };
 
   const handleThemeChange = (themeId: string): void => {
-    setTheme(themeId as any);
+    setTheme(themeId as ThemeId);
     close();
   };
 

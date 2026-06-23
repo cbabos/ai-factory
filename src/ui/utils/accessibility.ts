@@ -6,8 +6,8 @@
  * Check if text contrast meets WCAG AA requirements
  */
 export function meetsWcagContrast(
-  foreground: string,
-  background: string
+  _foreground: string,
+  _background: string
 ): boolean {
   // TODO: Implement contrast calculation
   return true;

@@ -10,30 +10,7 @@ import { Select } from '../components/forms/Select.js';
 import { MultiSelect } from '../components/forms/MultiSelect.js';
 import { StatusIndicator } from '../components/ui/StatusIndicator.js';
 import { AgentForm } from './AgentForm.js';
-import { API_ENDPOINTS } from '../services/api.js';
-
-export interface AgentDTO {
-  id: string;
-  name: string;
-  tags: string[];
-  complexityMin: number;
-  complexityMax: number;
-  tokenProfile: {
-    min: number;
-    max: number;
-    typical: number;
-  };
-  preferredModels?: string[];
-  timeoutMs: number;
-  maxRetries: number;
-  version: string;
-  isActive: boolean;
-  configSource: 'static' | 'custom';
-  description?: string;
-  metadata?: Record<string, unknown>;
-  createdAt: number;
-  updatedAt: number;
-}
+import { apiClient, type AgentMutationInput, type AgentRecord } from '../services/index.js';
 
 interface AgentFilter {
   tags: string[];
@@ -63,11 +40,11 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
   title = 'Agents',
   subtitle = 'Manage AI agent configurations',
 }) => {
-  const [agents, setAgents] = useState<AgentDTO[]>([]);
+  const [agents, setAgents] = useState<AgentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [editingAgent, setEditingAgent] = useState<AgentDTO | null>(null);
+  const [editingAgent, setEditingAgent] = useState<AgentRecord | null>(null);
   const [deletingAgent, setDeletingAgent] = useState<string | null>(null);
   const [filter, setFilter] = useState<AgentFilter>({
     tags: [],
@@ -78,10 +55,8 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
   const loadAgents = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch(API_ENDPOINTS.agents);
-      if (!response.ok) throw new Error('Failed to fetch agents');
-      const data = await response.json();
-      setAgents(data.data || []);
+      const data = await apiClient.listAgents();
+      setAgents(data);
       setError(null);
     } catch (err) {
       console.error('Failed to load agents:', err);
@@ -120,7 +95,7 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
     setShowForm(true);
   };
 
-  const handleEdit = (agent: AgentDTO) => {
+  const handleEdit = (agent: AgentRecord) => {
     setEditingAgent(agent);
     setShowForm(true);
   };
@@ -133,7 +108,7 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
     if (!deletingAgent) return;
     try {
       setLoading(true);
-      await fetch(`${API_ENDPOINTS.agents}/${deletingAgent}`, { method: 'DELETE' });
+      await apiClient.deleteAgent(deletingAgent);
       setAgents((prev) => prev.filter((a) => a.id !== deletingAgent));
       setError(null);
     } catch (err) {
@@ -145,11 +120,10 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
     }
   };
 
-  const handleFormSubmit = async (agentData: Partial<AgentDTO>) => {
+  const handleFormSubmit = async (agentData: Partial<AgentMutationInput>) => {
     try {
       setLoading(true);
-      const now = Date.now();
-      const agent: AgentDTO = {
+      const agent: AgentMutationInput = {
         id: agentData.id || `agent-${Date.now()}`,
         name: agentData.name || 'Unnamed Agent',
         tags: agentData.tags || [],
@@ -163,27 +137,16 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
         preferredModels: agentData.preferredModels,
         timeoutMs: agentData.timeoutMs ?? 30000,
         maxRetries: agentData.maxRetries ?? 2,
-        version: agentData.version || '1.0.0',
         isActive: agentData.isActive ?? true,
         configSource: agentData.configSource || 'static',
         description: agentData.description,
         metadata: agentData.metadata,
-        createdAt: agentData.createdAt || now,
-        updatedAt: now,
       };
 
       if (editingAgent) {
-        await fetch(`${API_ENDPOINTS.agents}/${agent.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(agent),
-        });
+        await apiClient.updateAgent(agent.id, agent);
       } else {
-        await fetch(API_ENDPOINTS.agents, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(agent),
-        });
+        await apiClient.createAgent(agent);
       }
 
       await loadAgents();
@@ -550,3 +513,4 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
 AgentsPage.displayName = 'AgentsPage';
 
 export { AgentsPage, AgentForm };
+export type { AgentRecord as AgentDTO };

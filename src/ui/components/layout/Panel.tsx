@@ -24,8 +24,8 @@ const Panel = forwardRef<HTMLDivElement, PanelProps>(
       padding = 'md',
       cyber = false,
       glitchEffect = false,
-      collapsible = false,
-      defaultExpanded = true,
+      collapsible: _collapsible = false,
+      defaultExpanded: _defaultExpanded = true,
       actions,
       footer,
       children,
@@ -68,8 +68,7 @@ const Panel = forwardRef<HTMLDivElement, PanelProps>(
         flex flex-col
         bg-[#1a1a1a]
         rounded-[12px]
-        border-2 border-[#00f3ff]/20
-        shadow-[0_0_20px_rgba(0,243,255,0.1)]
+        ${borderClasses[border]}
         ${cyberGlow}
         ${className || ''}
       `}

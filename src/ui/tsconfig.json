@@ -30,8 +30,26 @@
     },
     "typeRoots": ["./node_modules/@types", "./src/types"]
   },
-  "include": ["src"],
-  "references": [
-    { "path": "./tsconfig.node.json" }
+  "include": [
+    "./App.tsx",
+    "./main.tsx",
+    "./index.tsx",
+    "./components/**/*.ts",
+    "./components/**/*.tsx",
+    "./hooks/**/*.ts",
+    "./pages/**/*.ts",
+    "./pages/**/*.tsx",
+    "./services/**/*.ts",
+    "./theme/**/*.ts",
+    "./theme/**/*.tsx",
+    "./utils/**/*.ts"
+  ],
+  "exclude": [
+    "./**/__stories__/**",
+    "./**/__tests__/**",
+    "./.storybook/**",
+    "./dist",
+    "./node_modules",
+    "./coverage"
   ]
 }

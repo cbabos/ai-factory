@@ -1,38 +1,28 @@
-import { AgentsPage } from './pages/index.js';
-import { ModelsPage } from './pages/index.js';
+import { Navigate, Route, Routes } from 'react-router-dom';
+import { AgentsPage, ModelsPage, TaskDetailsPage, TasksPage } from './pages/index.js';
 import { MainLayout } from './components/layout/MainLayout.js';
 import { ThemeProvider } from './theme/index.js';
-import { useEffect, useState } from 'react';
+import { Panel } from './components/layout/Panel.js';
 
 const App = () => {
-  const [page, setPage] = useState('agents');
-
-  useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash.replace('#/', '') || 'agents';
-      setPage(hash as 'agents' | 'models' | 'tasks');
-    };
-    window.addEventListener('hashchange', handleHashChange);
-    handleHashChange();
-  }, []);
-
-  const renderPage = () => {
-    switch (page) {
-      case 'agents':
-        return <AgentsPage />;
-      case 'models':
-        return <ModelsPage />;
-      case 'tasks':
-        return <div>Tasks page coming soon</div>;
-      default:
-        return <AgentsPage />;
-    }
-  };
-
   return (
     <ThemeProvider defaultTheme="synthwave84">
       <MainLayout title="Factory">
-        {renderPage()}
+        <Routes>
+          <Route path="/" element={<Navigate to="/agents" replace />} />
+          <Route path="/agents" element={<AgentsPage />} />
+          <Route path="/models" element={<ModelsPage />} />
+          <Route path="/tasks" element={<TasksPage />} />
+          <Route path="/tasks/:taskId" element={<TaskDetailsPage />} />
+          <Route
+            path="*"
+            element={
+              <Panel title="Route Not Found" border="default">
+                The requested page does not exist.
+              </Panel>
+            }
+          />
+        </Routes>
       </MainLayout>
     </ThemeProvider>
   );

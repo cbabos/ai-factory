@@ -1,9 +1,15 @@
+interface ImportMetaEnvLike {
+  VITE_API_URL?: string;
+}
+
 /**
  * API configuration for UI
  * Uses environment variable or default to localhost:3001
  */
 
-export const API_BASE_URL = (import.meta as any).env?.VITE_API_URL ?? 'http://localhost:3001';
+export const API_BASE_URL =
+  ((import.meta as ImportMeta & { env?: ImportMetaEnvLike }).env?.VITE_API_URL) ??
+  'http://localhost:3001';
 
 export const API_ENDPOINTS = {
   agents: `${API_BASE_URL}/api/agents`,

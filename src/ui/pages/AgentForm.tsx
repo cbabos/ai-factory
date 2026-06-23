@@ -56,7 +56,7 @@ const AgentForm: React.FC<AgentFormProps> = ({
     preferredModels: agent?.preferredModels || [],
     timeoutMs: agent?.timeoutMs || 30000,
     maxRetries: agent?.maxRetries || 2,
-    version: agent?.version || '1.0.0',
+    version: agent?.version,
     isActive: agent?.isActive ?? true,
     configSource: agent?.configSource || 'static',
     description: agent?.description || '',

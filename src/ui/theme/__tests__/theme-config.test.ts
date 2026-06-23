@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { themeOptions, defaultThemeId, getThemeById, isValidTheme } from '../constants.js';
+import type { ThemeId } from '../types.js';
 
 describe('Theme Configuration', () => {
   it('should have correct default theme', () => {
@@ -23,7 +24,7 @@ describe('Theme Configuration', () => {
   });
 
   it('should return default theme for invalid ID', () => {
-    const theme = getThemeById('invalid' as any);
+    const theme = getThemeById('invalid' as ThemeId);
     expect(theme.id).toBe('synthwave84');
   });
 

@@ -180,12 +180,6 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
     onChange?.(value.filter((v) => v !== valueToRemove));
   };
 
-  // Handle input focus
-  const handleInputFocus = () => {
-    setIsOpen(true);
-    inputRef.current?.focus();
-  };
-
   // Size styles
   const sizeClasses = {
     sm: 'py-2 text-sm',
@@ -365,7 +359,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
           `}
           role="listbox"
         >
-          {filteredOptions().map((option, index) => {
+          {filteredOptions().map((option) => {
             const isSelected = value.includes(option.value);
             return (
               <li

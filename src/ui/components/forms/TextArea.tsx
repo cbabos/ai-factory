@@ -83,7 +83,7 @@ const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
       className,
       ...props
     },
-    ref
+    _ref
   ) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     React.useState(minRows);

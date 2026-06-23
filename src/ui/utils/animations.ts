@@ -97,7 +97,7 @@ export const animationEasing = {
 /**
  * Reduced motion preferences
  */
-export const prefersReducedMotion = (motion: 'reduce' | 'enhance' = 'reduce'): boolean => {
+export const prefersReducedMotion = (_motion: 'reduce' | 'enhance' = 'reduce'): boolean => {
   try {
     // Use matchMedia if available
     // @ts-ignore - matchMedia available in browsers
@@ -143,7 +143,7 @@ export function getAnimationStyles(
  * Generate grid background patterns
  */
 export function generateGridPattern(
-  size: number = 4,
+  _size: number = 4,
   color: string = '#00f3ff'
 ): string {
   return `linear-gradient(${color} 1px, transparent 1px), linear-gradient(90deg, ${color} 1px, transparent 1px)`;
@@ -173,7 +173,7 @@ export function generateNeonGlow(
   color: string,
   blur: number = 8,
   spread: number = 4,
-  opacity: number = 0.5
+  _opacity: number = 0.5
 ): string {
   return `0 0 ${blur}px ${color}, 0 0 ${spread * 2}px ${color}`;
 }

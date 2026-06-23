@@ -170,9 +170,6 @@ const ToggleCheckbox = forwardRef<HTMLInputElement, ToggleCheckboxProps>(
       disabled:opacity-50
     `;
 
-    // Checked checkbox styles
-    const checkedClasses = '';
-
     // Checkmark style
     const Checkmark: React.FC<{ checked: boolean }> = ({ checked }) => (
       <div

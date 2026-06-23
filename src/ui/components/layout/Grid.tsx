@@ -1,6 +1,6 @@
-import React, { forwardRef } from 'react';
+import React, { forwardRef, type HTMLAttributes } from 'react';
 
-export interface GridProps {
+export interface GridProps extends HTMLAttributes<HTMLDivElement> {
   children?: React.ReactNode;
   columns?: '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | 'auto' | 'fr';
   gap?: 'none' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
@@ -12,7 +12,6 @@ export interface GridProps {
   glitchEffect?: boolean;
   minmax?: string;
   autoRows?: 'auto' | 'min' | 'max' | 'fr';
-  className?: string;
 }
 
 export interface GridItemProps {
@@ -121,6 +120,10 @@ const Grid = forwardRef<HTMLDivElement, GridProps>(
     return (
       <div
         ref={ref}
+        style={{
+          ...(props.style ?? {}),
+          gridAutoRows: autoRows === 'fr' ? 'minmax(0, 1fr)' : autoRows,
+        }}
         className={`
           grid
           ${columnsClasses[columns]}

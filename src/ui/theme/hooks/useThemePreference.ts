@@ -9,7 +9,7 @@ export interface UseThemePreferenceResult {
 }
 
 export const useThemePreference = (): UseThemePreferenceResult => {
-  const { currentTheme, setTheme } = useThemeContext() as { currentTheme: Theme; setTheme: (themeId: ThemeId) => void };
+  const { setTheme } = useThemeContext() as { currentTheme: Theme; setTheme: (themeId: ThemeId) => void };
 
   const saveThemePreference = useCallback(
     (themeId: ThemeId): void => {

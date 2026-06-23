@@ -3,6 +3,7 @@ import { Input } from '../components/forms/Input.js';
 import { Select } from '../components/forms/Select.js';
 import { Button } from '../components/common/Button.js';
 import type { Provider } from '../../core/types.js';
+import type { ModelRecord } from '../services/index.js';
 
 const PROVIDER_OPTIONS: { value: Provider; label: string }[] = [
   { value: 'openai', label: 'OpenAI' },
@@ -40,22 +41,7 @@ const defaultState: ModelFormState = {
 };
 
 export interface ModelFormProps {
-  model?: {
-    id?: string;
-    provider: Provider;
-    modelId: string;
-    maxTokens: number;
-    costPer1kInput: number;
-    costPer1kOutput: number;
-    capabilities: string[];
-    ownedBy: string;
-    version?: string;
-    isActive: boolean;
-    discoveredAt?: number;
-    configSource?: 'static' | 'discovered';
-    createdAt?: number;
-    updatedAt?: number;
-  } | null;
+  model?: ModelRecord | null;
   onClose: () => void;
   onSubmit: (modelData: Partial<ModelFormState>) => void;
 }
@@ -76,7 +62,7 @@ export const ModelForm: React.FC<ModelFormProps> = ({ model, onClose, onSubmit }
         capabilities: model.capabilities || [],
         ownedBy: model.ownedBy || '',
         isActive: model.isActive ?? true,
-        version: model.version,
+        version: model.version !== undefined ? String(model.version) : undefined,
         configSource: model.configSource || 'static',
       });
     }

@@ -143,7 +143,7 @@ const ToggleRadioGroup: React.FC<ToggleRadioGroupProps> = ({
   };
 
   // Option classes
-  const optionClasses = (index: number, isSelected: boolean) => `
+  const optionClasses = (isSelected: boolean) => `
     relative flex items-center gap-3
     cursor-pointer transition-all duration-200 ease-[cubic-bezier(0.68,-0.55,0.27,1.55)]
     disabled:opacity-50 disabled:cursor-not-allowed
@@ -196,7 +196,7 @@ const ToggleRadioGroup: React.FC<ToggleRadioGroupProps> = ({
       role="radiogroup"
       aria-label={label}
     >
-      {options.map((option, index) => {
+      {options.map((option) => {
         const isSelected = option.value === value;
 
         return (
@@ -207,7 +207,7 @@ const ToggleRadioGroup: React.FC<ToggleRadioGroupProps> = ({
             aria-checked={isSelected}
             aria-disabled={option.disabled || disabled}
             onClick={() => !option.disabled && !disabled && onChange?.(option.value)}
-            className={optionClasses(index, isSelected)}
+              className={optionClasses(isSelected)}
           >
             <RadioIndicator isSelected={isSelected} />
 

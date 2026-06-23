@@ -1,4 +1,4 @@
-import React, {forwardRef, useState, useEffect} from 'react';
+import React, {useState, useEffect} from 'react';
 
 export interface ThemeSwitcherProps {
   /**
@@ -117,7 +117,7 @@ const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({
           "
           role="listbox"
         >
-          {themeOptions.map((theme, index) => {
+          {themeOptions.map((theme) => {
             const isSelected = currentLabel === theme.label;
             return (
               <div

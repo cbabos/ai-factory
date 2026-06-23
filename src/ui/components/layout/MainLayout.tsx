@@ -1,10 +1,17 @@
 import { ReactNode } from 'react';
-import { Button } from '../controls/Button.js';
+import { NavLink } from 'react-router-dom';
+import { ThemeSwitcher } from '../../theme/index.js';
 
 interface MainLayoutProps {
   children: ReactNode;
   title?: string;
 }
+
+const navigationItems = [
+  { to: '/agents', label: 'Agents' },
+  { to: '/models', label: 'Models' },
+  { to: '/tasks', label: 'Tasks' },
+];
 
 export const MainLayout: React.FC<MainLayoutProps> = ({ children, title = 'AI Factory' }) => {
   return (
@@ -16,18 +23,25 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, title = 'AI Fa
               <span className="text-accent-primary">AI</span> {title}
             </h1>
             <nav className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={() => window.location.hash = '/agents'}>
-                Agents
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => window.location.hash = '/models'}>
-                Models
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => window.location.hash = '/tasks'}>
-                Tasks
-              </Button>
+              {navigationItems.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    `px-3 py-2 text-sm rounded-cyber border transition-all ${
+                      isActive
+                        ? 'border-accent-primary bg-accent-primary/10 text-accent-primary'
+                        : 'border-transparent text-text-secondary hover:border-accent-primary/30 hover:text-accent-primary'
+                    }`
+                  }
+                >
+                  {item.label}
+                </NavLink>
+              ))}
             </nav>
           </div>
           <div className="flex items-center gap-2">
+            <ThemeSwitcher showLabel />
             <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-accent-primary/10">
               <div className="w-2 h-2 rounded-full bg-accent-success animate-pulse" />
               <span className="text-xs font-medium text-accent-success">System Active</span>

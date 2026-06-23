@@ -1,27 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ToggleRadioGroup } from '../components/controls/ToggleRadioGroup.js';
 import { Badge } from '../components/ui/Badge.js';
 import { Card } from '../components/layout/Card.js';
 import { Panel } from '../components/layout/Panel.js';
-import { API_ENDPOINTS } from '../services/api.js';
-
-export interface Task {
-  id: string;
-  description: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  createdAt: number;
-  priority: 'critical' | 'high' | 'normal' | 'batch';
-  cost?: number;
-  tokens?: number;
-}
-
-export interface TasksResponse {
-  items: Task[];
-  total: number;
-  page: number;
-  pageSize: number;
-}
+import {
+  apiClient,
+  isTaskPriority,
+  isTaskStatus,
+  type TaskListItem,
+} from '../services/index.js';
 
 const statusOptions = [
   { value: 'all', label: 'All Status' },
@@ -47,8 +35,9 @@ const STATUS_COLORS = {
 };
 
 export default function Tasks() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasks, setTasks] = useState<TaskListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalPages, setTotalPages] = useState(1);
@@ -62,29 +51,18 @@ export default function Tasks() {
   const fetchTasks = useCallback(async (page: number = 1) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        pageSize: pageSize.toString(),
+      const data = await apiClient.listTasks({
+        page,
+        pageSize,
+        status: isTaskStatus(statusFilter) ? statusFilter : undefined,
+        priority: isTaskPriority(priorityFilter) ? priorityFilter : undefined,
       });
-
-      if (statusFilter !== 'all') {
-        params.append('status', statusFilter);
-      }
-      if (priorityFilter !== 'all') {
-        params.append('priority', priorityFilter);
-      }
-      if (searchTerm) {
-        params.append('search', searchTerm);
-      }
-
-      const response = await fetch(`${API_ENDPOINTS.tasks}?${params.toString()}`);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch tasks: ${response.statusText}`);
-      }
-
-      const data: TasksResponse = await response.json();
-      setTasks(data.items);
+      const filteredItems = searchTerm
+        ? data.items.filter((task) =>
+            task.description.toLowerCase().includes(searchTerm.toLowerCase()),
+          )
+        : data.items;
+      setTasks(filteredItems);
       setTotalPages(Math.ceil(data.total / pageSize));
       setCurrentPage(page);
     } catch (err) {
@@ -282,6 +260,15 @@ export default function Tasks() {
                 <Badge variant="cyber">
                   {task.priority}
                 </Badge>
+              </div>
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => navigate(`/tasks/${task.id}`)}
+                  className="text-sm text-accent-primary hover:text-accent-secondary transition-colors"
+                >
+                  View Thread
+                </button>
               </div>
             </Card>
           ))

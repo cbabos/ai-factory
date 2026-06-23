@@ -4,11 +4,10 @@ import { Grid, GridItem } from '../components/layout/Grid.js';
 import { Card } from '../components/layout/Card.js';
 import { Button } from '../components/common/Button.js';
 import { Select } from '../components/forms/Select.js';
-import { Badge } from '../components/ui/Badge.js';
 import { StatusIndicator } from '../components/ui/StatusIndicator.js';
 import { ModelForm } from './ModelForm.js';
 import type { Provider } from '../../core/types.js';
-import { API_ENDPOINTS } from '../services/api.js';
+import { apiClient, type ModelMutationInput, type ModelRecord } from '../services/index.js';
 
 const PROVIDER_OPTIONS: { value: Provider; label: string }[] = [
   { value: 'openai', label: 'OpenAI' },
@@ -21,34 +20,7 @@ const PROVIDER_OPTIONS: { value: Provider; label: string }[] = [
   { value: 'deepseek', label: 'Deepseek' },
 ];
 
-const PROVIDER_COLORS: Record<Provider, 'primary' | 'secondary' | 'success' | 'neutral'> = {
-  openai: 'primary',
-  anthropic: 'secondary',
-  google: 'success',
-  ollama: 'neutral',
-  openrouter: 'primary',
-  mistral: 'secondary',
-  groq: 'primary',
-  deepseek: 'success',
-  omlx: 'neutral',
-};
-
-export interface Model {
-  id: string;
-  provider: Provider;
-  modelId: string;
-  maxTokens: number;
-  costPer1kInput: number;
-  costPer1kOutput: number;
-  capabilities: string[];
-  ownedBy: string;
-  version?: string;
-  isActive: boolean;
-  discoveredAt?: number;
-  configSource?: 'static' | 'discovered';
-  createdAt?: number;
-  updatedAt?: number;
-}
+export interface Model extends ModelRecord {}
 
 export interface ModelFormState {
   provider: Provider;
@@ -68,7 +40,7 @@ export interface ModelsPageProps {
 }
 
 const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
-  const [models, setModels] = useState<Model[]>([]);
+  const [models, setModels] = useState<ModelRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterProvider, setFilterProvider] = useState<Provider | 'all'>('all');
@@ -82,12 +54,8 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(API_ENDPOINTS.models);
-      if (!response.ok) {
-        throw new Error('Failed to load models');
-      }
-      const data = await response.json();
-      setModels(data.data || []);
+      const data = await apiClient.listModels();
+      setModels(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -99,16 +67,20 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
     loadModels();
   }, [loadModels]);
 
-  const handleCreate = async (modelData: Partial<Model>) => {
+  const handleCreate = async (modelData: Partial<ModelMutationInput>) => {
     try {
-      const response = await fetch(API_ENDPOINTS.models, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(modelData),
+      await apiClient.createModel({
+        provider: modelData.provider ?? 'openai',
+        modelId: modelData.modelId ?? '',
+        maxTokens: modelData.maxTokens ?? 4096,
+        costPer1kInput: modelData.costPer1kInput ?? 0.001,
+        costPer1kOutput: modelData.costPer1kOutput ?? 0.001,
+        capabilities: modelData.capabilities ?? [],
+        ownedBy: modelData.ownedBy,
+        isActive: modelData.isActive ?? true,
+        configSource: modelData.configSource ?? 'static',
+        discoveredAt: modelData.discoveredAt,
       });
-      if (!response.ok) {
-        throw new Error('Failed to create model');
-      }
       await loadModels();
       setIsFormOpen(false);
     } catch (err) {
@@ -116,17 +88,10 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
     }
   };
 
-  const handleUpdate = async (modelData: Partial<Model>) => {
+  const handleUpdate = async (modelData: Partial<ModelMutationInput>) => {
     if (!editingModel) return;
     try {
-      const response = await fetch(`${API_ENDPOINTS.models}/${editingModel.provider}/${editingModel.modelId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(modelData),
-      });
-      if (!response.ok) {
-        throw new Error('Failed to update model');
-      }
+      await apiClient.updateModel(editingModel.provider, editingModel.modelId, modelData);
       await loadModels();
       setEditingModel(null);
       setIsFormOpen(false);
@@ -138,12 +103,7 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
   const handleDelete = async () => {
     if (!deleteConfirm) return;
     try {
-      const response = await fetch(`${API_ENDPOINTS.models}/${deleteConfirm.provider}/${deleteConfirm.modelId}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) {
-        throw new Error('Failed to delete model');
-      }
+      await apiClient.deleteModel(deleteConfirm.provider, deleteConfirm.modelId);
       await loadModels();
       setDeleteConfirm(null);
     } catch (err) {

@@ -104,6 +104,7 @@ export class AIFactory {
   private settingsStore?: SQLiteConfigStore;
   private agentStore?: SQLiteAgentStore;
   private modelStore?: SQLiteModelStore;
+  private baseCatalogModels: ModelInfo[];
 
   constructor(options: AIFactoryOptions) {
     const { config, secrets, callers: injectedCallers, logger, repository, taskRepository, tools, apiServerOptions } = options;
@@ -122,22 +123,26 @@ export class AIFactory {
       this.modelStore = new SQLiteModelStore("./ai-factory.db");
     }
 
+    const runtimeModels = this.resolveRuntimeModels(config.models);
+    const runtimeAgents = this.resolveRuntimeAgents(config.agents);
+    this.baseCatalogModels = runtimeModels;
+
     this.budgetTracker = new BudgetTracker(this.eventBus);
     this.budgetTracker.loadConfig({
       defaultCap: config.budget.defaultCap,
       softCapRatio: config.budget.softCapRatio,
     });
-    const providers = [...new Set(config.models.map((m) => m.provider))];
+    const providers = [...new Set(runtimeModels.map((m) => m.provider))];
     this.budgetTracker.initialize(providers);
 
     this.agentRegistry = new AgentRegistry(this.eventBus);
-    for (const manifest of config.agents) {
+    for (const manifest of runtimeAgents) {
       this.agentRegistry.register(manifest);
     }
 
     this.metricsCollector = new MetricsCollector(this.eventBus);
 
-    this.callers = injectedCallers ?? this.buildCallers(config, secrets, this.breakers);
+    this.callers = injectedCallers ?? this.buildCallers(runtimeModels, secrets, this.breakers);
     const defaultCaller = this.callers.values().next().value;
     if (!defaultCaller) {
       throw new Error("No LLM callers configured");
@@ -167,7 +172,7 @@ export class AIFactory {
 
     // Use the static catalog as a starting point; initialize() will merge in
     // discovered models and pick a default estimator model if needed.
-    this.orchestrator = this.buildOrchestrator(config.models);
+    this.orchestrator = this.buildOrchestrator(runtimeModels);
   }
 
   registerSensor(sensor: ISensor): void {
@@ -202,9 +207,12 @@ export class AIFactory {
       );
     }
 
+    const runtimeModels = this.resolveRuntimeModels(this.config.models);
+    this.baseCatalogModels = runtimeModels;
+
     const catalog = new ModelCatalog(
       [...this.callers.values()],
-      this.config.models,
+      runtimeModels,
       this.logger,
     );
 
@@ -302,12 +310,12 @@ export class AIFactory {
     discovered: { provider: string; modelId: string; ownedBy?: string }[],
   ): ModelInfo[] {
     const staticByKey = new Map(
-      this.config.models.map((m) => [`${m.provider}:${m.modelId}`, m]),
+      this.baseCatalogModels.map((m) => [`${m.provider}:${m.modelId}`, m]),
     );
 
     // Static config defines authoritative capabilities, cost, and priority.
     // Preserve that order first.
-    const ordered: ModelInfo[] = [...this.config.models];
+    const ordered: ModelInfo[] = [...this.baseCatalogModels];
     const added = new Set<string>(staticByKey.keys());
 
     // Append genuinely new discovered models at the end with conservative
@@ -385,12 +393,12 @@ export class AIFactory {
   }
 
   private buildCallers(
-    config: FactoryConfig,
+    models: ModelInfo[],
     secrets: SecretsProvider,
     breakers: Map<Provider, CircuitBreaker>,
   ): Map<Provider, ILLMCaller> {
     const callers = new Map<Provider, ILLMCaller>();
-    const configuredProviders = new Set(config.models.map((m) => m.provider));
+    const configuredProviders = new Set(models.map((m) => m.provider));
     const rateLimiter = new RateLimiter({ maxPerSecond: 10, burstSize: 5 });
 
     const wrap = (provider: Provider, caller: ILLMCaller): ILLMCaller => {
@@ -447,6 +455,87 @@ export class AIFactory {
     }
 
     return callers;
+  }
+
+  private resolveRuntimeAgents(fallbackAgents: FactoryConfig["agents"]): FactoryConfig["agents"] {
+    if (!this.agentStore) {
+      return fallbackAgents;
+    }
+
+    for (const agent of fallbackAgents) {
+      if (this.agentStore.get(agent.id)) {
+        continue;
+      }
+
+      this.agentStore.save({
+        id: agent.id,
+        name: agent.id,
+        tags: agent.tags,
+        complexityMin: agent.complexityRange[0],
+        complexityMax: agent.complexityRange[1],
+        tokenProfileMin: agent.tokenProfile.min,
+        tokenProfileMax: agent.tokenProfile.max,
+        tokenProfileTypical: agent.tokenProfile.typical,
+        preferredModels: agent.preferredModels,
+        timeoutMs: agent.timeoutMs,
+        maxRetries: agent.maxRetries,
+        configSource: "static",
+      });
+    }
+
+    const storedAgents = this.agentStore
+      .getAll()
+      .filter((agent) => agent.isActive)
+      .map((agent) => ({
+        id: agent.id,
+        tags: agent.tags,
+        complexityRange: [agent.complexityMin, agent.complexityMax] as [number, number],
+        tokenProfile: {
+          min: agent.tokenProfile.min,
+          max: agent.tokenProfile.max,
+          typical: agent.tokenProfile.typical,
+        },
+        preferredModels: agent.preferredModels,
+        timeoutMs: agent.timeoutMs,
+        maxRetries: agent.maxRetries,
+      }));
+
+    return storedAgents.length > 0 ? storedAgents : fallbackAgents;
+  }
+
+  private resolveRuntimeModels(fallbackModels: FactoryConfig["models"]): ModelInfo[] {
+    if (!this.modelStore) {
+      return fallbackModels;
+    }
+
+    for (const model of fallbackModels) {
+      if (this.modelStore.get(model.provider, model.modelId)) {
+        continue;
+      }
+
+      this.modelStore.save({
+        provider: model.provider,
+        modelId: model.modelId,
+        maxTokens: model.maxTokens,
+        costPer1kInput: model.costPer1kInput,
+        costPer1kOutput: model.costPer1kOutput,
+        capabilities: model.capabilities,
+        configSource: "static",
+      });
+    }
+
+    const storedModels = this.modelStore
+      .getAllActive()
+      .map((model) => ({
+        provider: model.provider as Provider,
+        modelId: model.modelId,
+        maxTokens: model.maxTokens,
+        costPer1kInput: model.costPer1kInput,
+        costPer1kOutput: model.costPer1kOutput,
+        capabilities: model.capabilities,
+      }));
+
+    return storedModels.length > 0 ? storedModels : fallbackModels;
   }
 
   private buildAgents(

@@ -55,6 +55,11 @@ import {
 import type { IToolRegistry } from "./tools/interfaces.js";
 import type { ITaskRepository } from "./core/task-repository.js";
 import type { SecretsProvider } from "./core/secrets.js";
+import { SQLiteAgentStore } from "./core/agent-store.js";
+import { SQLiteModelStore } from "./core/model-store.js";
+import { SQLiteConfigStore } from "./core/sqlite-config-store.js";
+import { ApiServer } from "./core/api-server.js";
+import { setSettingsStore as setupSettingsStore } from "./core/api-handlers/settings.js";
 
 export interface AIFactoryOptions {
   config: FactoryConfig;
@@ -64,6 +69,7 @@ export interface AIFactoryOptions {
   repository?: IRepository<{ id: string }>;
   taskRepository?: ITaskRepository;
   tools?: IToolRegistry;
+  apiServerOptions?: import("./core/api-types.js").ApiServerOptions;
 }
 
 export class AIFactory {
@@ -94,9 +100,11 @@ export class AIFactory {
   private adapters = new Map<string, ISignalAdapter>();
   private responders = new Map<string, IResponder>();
   private running = false;
+  private apiServer?: ApiServer;
+  private settingsStore?: SQLiteConfigStore;
 
   constructor(options: AIFactoryOptions) {
-    const { config, secrets, callers: injectedCallers, logger, repository, taskRepository, tools } = options;
+    const { config, secrets, callers: injectedCallers, logger, repository, taskRepository, tools, apiServerOptions } = options;
 
     this.config = config;
     this.logger = logger ?? new ConsoleLogger({ namespace: "AIFactory", level: "info" });
@@ -105,6 +113,14 @@ export class AIFactory {
     this.tools = tools;
     this.eventBus = new EventBus(new NoopLogger());
     this.tracer = new Tracer();
+
+    if (apiServerOptions) {
+      this.apiServer = new ApiServer(apiServerOptions);
+      const agentStore = new SQLiteAgentStore("./ai-factory.db");
+      this.apiServer.getApp().set("agentStore", agentStore);
+      const modelStore = new SQLiteModelStore("./ai-factory.db");
+      this.apiServer.getApp().set("modelStore", modelStore);
+    }
 
     this.budgetTracker = new BudgetTracker(this.eventBus);
     this.budgetTracker.loadConfig({
@@ -166,6 +182,13 @@ export class AIFactory {
     this.responders.set(responder.channel, responder);
   }
 
+  setSettingsStore(store: SQLiteConfigStore): void {
+    this.settingsStore = store;
+    if (this.apiServer) {
+      setupSettingsStore(this.apiServer.getApp(), store);
+    }
+  }
+
   async initialize(): Promise<void> {
     const catalog = new ModelCatalog(
       [...this.callers.values()],
@@ -208,6 +231,11 @@ export class AIFactory {
   async start(): Promise<void> {
     this.running = true;
 
+    // Start API server if enabled
+    if (this.apiServer) {
+      await this.apiServer.start();
+    }
+
     for (const sensor of this.sensors) {
       sensor.signals.subscribe((raw) => this.onSignal(raw));
       sensor.start();
@@ -236,6 +264,10 @@ export class AIFactory {
     this.healthChecker.destroy();
     this.metricsCollector.destroy();
     this.budgetTracker.destroy();
+
+    if (this.apiServer) {
+      await this.apiServer.stop();
+    }
   }
 
   getEventBus(): EventBus {

@@ -30,3 +30,7 @@ export * from "./health-checker.js";
 export * from "./sqlite-repository.js";
 export * from "./task-repository.js";
 export * from "./sqlite-task-repository.js";
+export * from "./sqlite-config-store.js";
+export * from "./agent-store.js";
+export * from "./model-store.js";
+export * from "./api-server.js";

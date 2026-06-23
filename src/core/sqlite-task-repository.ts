@@ -75,8 +75,9 @@ export class SQLiteTaskRepository implements ITaskRepository {
     return rows.map((row) => this.rowToRecord(row));
   }
 
-  close(): void {
+  close(): Promise<void> {
     this.db.close();
+    return Promise.resolve();
   }
 
   private rowToRecord(row: Record<string, unknown>): TaskRecord {

@@ -3,7 +3,7 @@ import type { IAgentRegistry, IEventBus } from "./interfaces.js";
 
 export class AgentRegistry implements IAgentRegistry {
   private agents = new Map<string, AgentManifest>();
-  private eventBus: IEventBus;
+  public eventBus: IEventBus;
 
   constructor(eventBus: IEventBus) {
     this.eventBus = eventBus;

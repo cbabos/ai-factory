@@ -16,6 +16,7 @@ export interface ITaskRepository {
   saveConversation(taskId: string, conversation: ConversationTurn[]): Promise<void>;
   get(taskId: string): Promise<TaskRecord | undefined>;
   getAll(): Promise<TaskRecord[]>;
+  close(): Promise<void>;
 }
 
 export class InMemoryTaskRepository implements ITaskRepository {
@@ -65,5 +66,9 @@ export class InMemoryTaskRepository implements ITaskRepository {
 
   async getAll(): Promise<TaskRecord[]> {
     return [...this.records.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  async close(): Promise<void> {
+    this.records.clear();
   }
 }

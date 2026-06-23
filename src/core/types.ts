@@ -4,7 +4,7 @@ export type Channel = "email" | "slack" | "webhook" | "cron" | "filesystem" | "a
 
 // ─── Providers & Models ──────────────────────────────────────
 
-export type Provider = "openai" | "anthropic" | "google" | "mistral" | "groq" | "deepseek" | "ollama" | "omlx";
+export type Provider = "openai" | "anthropic" | "google" | "mistral" | "groq" | "deepseek" | "ollama" | "omlx" | "openrouter";
 
 export interface ModelInfo {
   provider: Provider;
@@ -271,3 +271,17 @@ export interface FactoryConfig {
   models: ModelInfo[];
   agents: AgentManifest[];
 }
+
+// ─── Runtime Configuration ───────────────────────────────────────────────────
+
+export interface Settings {
+  id: string;
+  theme: 'synthwave84' | 'tokyonight' | 'zenburn';
+  ui_layout: string;
+  auto_refresh_ms: number;
+  max_tasks_display: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type UpdateSettingsInput = Omit<Settings, 'id' | 'createdAt' | 'updatedAt'>;

@@ -28,7 +28,7 @@ export class FileIOAgent extends Agent implements IAgent {
   }
 
   protected buildSystemPrompt(_subTask: SubTask): string {
-    return "You are a file I/O agent. Read, list, and write files as needed. Use the provided file tools. Return concise file contents or operation results.";
+    return "You are a file I/O agent. Read, list, and write files as needed. Use the provided file tools. When the task says to write output to a specific file path, call writeFile with that path once you have the content, then provide a concise confirmation. Do not repeat tool calls you already executed in this conversation.";
   }
 
   protected parseOutput(raw: string, _subTask: SubTask): unknown {

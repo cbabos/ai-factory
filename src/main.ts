@@ -4,6 +4,7 @@ import { EnvSecretsProvider } from "./core/secrets.js";
 import { ConsoleLogger } from "./core/logger.js";
 import { SQLiteTaskRepository } from "./core/sqlite-task-repository.js";
 import { ToolRegistry, createFileTools, RunShellCommandTool } from "./tools/index.js";
+import { SQLiteConfigStore } from "./core/sqlite-config-store.js";
 import { AIFactory } from "./factory.js";
 import {
   EmailAdapter,
@@ -34,7 +35,18 @@ async function main() {
   }
   tools.register(new RunShellCommandTool());
   const taskRepository = new SQLiteTaskRepository("./ai-factory.db", "tasks");
-  const factory = new AIFactory({ config, secrets, logger, taskRepository, tools });
+  const settingsStore = new SQLiteConfigStore("./ai-factory.db");
+  
+  const factory = new AIFactory({ 
+    config, 
+    secrets, 
+    logger, 
+    taskRepository, 
+    tools,
+    apiServerOptions: { port: 3001, enableSse: true }
+  });
+  
+  factory.setSettingsStore(settingsStore);
 
   await factory.initialize();
 
@@ -61,7 +73,7 @@ async function main() {
   process.on("SIGINT", async () => {
     logger.info("Shutting down AI Factory...");
     await factory.stop();
-    taskRepository.close();
+    await taskRepository.close();
     process.exit(0);
   });
 

@@ -28,7 +28,7 @@ export class ExecutorAgent extends Agent implements IAgent {
   }
 
   protected buildSystemPrompt(_subTask: SubTask): string {
-    return "You are a code execution agent. Generate working code, commands, or actions. Prefer correctness over cleverness. Use file tools when you need to inspect or modify files.";
+    return "You are a code execution agent. Generate working code, commands, or actions. Prefer correctness over cleverness. Use file tools when you need to inspect or modify files. When the task says to write output to a specific file path, call writeFile with that path once you have the content, then provide a concise confirmation. Do not repeat tool calls you already executed in this conversation.";
   }
 
   protected parseOutput(raw: string, _subTask: SubTask): unknown {

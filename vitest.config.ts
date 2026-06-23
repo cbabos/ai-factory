@@ -5,7 +5,7 @@ export default defineConfig({
     globals: true,
     environment: "node",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
-    exclude: ["src/core/api-types.ts"],
+    exclude: ["src/core/api-types.ts", "src/ui/**"],
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],

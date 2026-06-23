@@ -102,6 +102,8 @@ export class AIFactory {
   private running = false;
   private apiServer?: ApiServer;
   private settingsStore?: SQLiteConfigStore;
+  private agentStore?: SQLiteAgentStore;
+  private modelStore?: SQLiteModelStore;
 
   constructor(options: AIFactoryOptions) {
     const { config, secrets, callers: injectedCallers, logger, repository, taskRepository, tools, apiServerOptions } = options;
@@ -116,10 +118,8 @@ export class AIFactory {
 
     if (apiServerOptions) {
       this.apiServer = new ApiServer(apiServerOptions);
-      const agentStore = new SQLiteAgentStore("./ai-factory.db");
-      this.apiServer.getApp().set("agentStore", agentStore);
-      const modelStore = new SQLiteModelStore("./ai-factory.db");
-      this.apiServer.getApp().set("modelStore", modelStore);
+      this.agentStore = new SQLiteAgentStore("./ai-factory.db");
+      this.modelStore = new SQLiteModelStore("./ai-factory.db");
     }
 
     this.budgetTracker = new BudgetTracker(this.eventBus);
@@ -190,6 +190,18 @@ export class AIFactory {
   }
 
   async initialize(): Promise<void> {
+    if (this.apiServer) {
+      await this.apiServer.initialize(
+        this.agentStore,
+        this.modelStore,
+        this.taskRepository,
+        this.agentRegistry,
+        undefined,
+        this.tracer,
+        this.budgetTracker,
+      );
+    }
+
     const catalog = new ModelCatalog(
       [...this.callers.values()],
       this.config.models,

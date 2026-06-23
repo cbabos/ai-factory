@@ -27,6 +27,29 @@ function _agentRecordToDTO(agent: AgentRecord): Record<string, unknown> {
   };
 }
 
+interface ParsedTokenProfile {
+  min: number;
+  max: number;
+  typical: number;
+}
+
+function _parseTokenProfile(body: Record<string, unknown>): ParsedTokenProfile | null {
+  const nested = body.tokenProfile as Record<string, unknown> | undefined;
+  const min = nested?.min ?? body.tokenProfileMin;
+  const max = nested?.max ?? body.tokenProfileMax;
+  const typical = nested?.typical ?? body.tokenProfileTypical;
+
+  if (
+    typeof min !== "number" ||
+    typeof max !== "number" ||
+    typeof typical !== "number"
+  ) {
+    return null;
+  }
+
+  return { min, max, typical };
+}
+
 export async function listAgents(
   req: Request,
   res: Response,
@@ -100,6 +123,7 @@ export async function createAgent(
     const store = req.app.get("agentStore") as IAgentStore;
 
     const body = req.body as Record<string, unknown>;
+    const tokenProfile = _parseTokenProfile(body);
     if (
       !body ||
       typeof body.id !== "string" ||
@@ -107,14 +131,10 @@ export async function createAgent(
       !Array.isArray(body.tags) ||
       typeof body.complexityMin !== "number" ||
       typeof body.complexityMax !== "number" ||
-      typeof body.tokenProfileMin !== "number" ||
-      typeof body.tokenProfileMax !== "number" ||
-      typeof body.tokenProfileTypical !== "number"
+      tokenProfile === null
     ) {
       throw new ApiError("Invalid request body", { statusCode: 400 });
     }
-
-  const _createdAt = Date.now();
 
     const record = store.save({
       id: body.id,
@@ -122,9 +142,9 @@ export async function createAgent(
       tags: body.tags,
       complexityMin: body.complexityMin,
       complexityMax: body.complexityMax,
-      tokenProfileMin: body.tokenProfileMin,
-      tokenProfileMax: body.tokenProfileMax,
-      tokenProfileTypical: body.tokenProfileTypical,
+      tokenProfileMin: tokenProfile.min,
+      tokenProfileMax: tokenProfile.max,
+      tokenProfileTypical: tokenProfile.typical,
       preferredModels: body.preferredModels as string[] | undefined,
       timeoutMs: (body.timeoutMs as number) ?? 30000,
       maxRetries: (body.maxRetries as number) ?? 2,
@@ -146,23 +166,24 @@ export async function updateAgent(
 ): Promise<void> {
   try {
     const store = req.app.get("agentStore") as IAgentStore;
-  const { id } = req.params;
+    const { id } = req.params;
 
-  const body = req.body as Record<string, unknown>;
+    const body = req.body as Record<string, unknown>;
+    const tokenProfile = _parseTokenProfile(body);
 
-  const existing = store.get(id as string);
-  if (!existing) {
-    throw new ApiError("Agent not found", { statusCode: 404 });
-  }
+    const existing = store.get(id as string);
+    if (!existing) {
+      throw new ApiError("Agent not found", { statusCode: 404 });
+    }
 
     const updates: Record<string, unknown> = {
       name: body.name ?? existing.name,
       tags: body.tags ?? existing.tags,
       complexityMin: body.complexityMin ?? existing.complexityMin,
       complexityMax: body.complexityMax ?? existing.complexityMax,
-      tokenProfileMin: body.tokenProfileMin ?? existing.tokenProfile.min,
-      tokenProfileMax: body.tokenProfileMax ?? existing.tokenProfile.max,
-      tokenProfileTypical: body.tokenProfileTypical ?? existing.tokenProfile.typical,
+      tokenProfileMin: tokenProfile?.min ?? existing.tokenProfile.min,
+      tokenProfileMax: tokenProfile?.max ?? existing.tokenProfile.max,
+      tokenProfileTypical: tokenProfile?.typical ?? existing.tokenProfile.typical,
       preferredModels: body.preferredModels ?? existing.preferredModels,
       timeoutMs: body.timeoutMs ?? existing.timeoutMs,
       maxRetries: body.maxRetries ?? existing.maxRetries,
@@ -185,7 +206,7 @@ export async function updateAgent(
       maxRetries: updates.maxRetries as number,
       description: updates.description as string | undefined,
       metadata: updates.metadata as Record<string, unknown> | undefined,
-       isActive: updates.isActive as boolean | undefined,
+      isActive: updates.isActive as boolean | undefined,
     });
 
     res.json({ data: _agentRecordToDTO(record) });
@@ -203,12 +224,12 @@ export async function deleteAgent(
     const store = req.app.get("agentStore") as IAgentStore;
     const { id } = req.params;
 
-  const existing = store.get(id as string);
-  if (!existing) {
-    throw new ApiError("Agent not found", { statusCode: 404 });
-  }
+    const existing = store.get(id as string);
+    if (!existing) {
+      throw new ApiError("Agent not found", { statusCode: 404 });
+    }
 
-  store.softDelete(id as string);
+    store.softDelete(id as string);
     res.status(204).send();
   } catch (error) {
     next(error);

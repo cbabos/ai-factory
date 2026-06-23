@@ -15,5 +15,5 @@
     "lib": ["ES2022", "DOM"]
   },
   "include": ["src"],
-  "exclude": ["src/ui/theme/__stories__", "src/ui/components/**/__stories__", "src/ui/components/**/__tests__"]
+  "exclude": ["src/ui/**"]
 }

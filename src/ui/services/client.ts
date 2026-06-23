@@ -45,26 +45,6 @@ async function requestJson<T>(input: RequestInfo | URL, init?: RequestInit): Pro
   return response.json() as Promise<T>;
 }
 
-function toAgentPayload(agent: AgentMutationInput): Record<string, unknown> {
-  return {
-    id: agent.id,
-    name: agent.name,
-    tags: agent.tags,
-    complexityMin: agent.complexityMin,
-    complexityMax: agent.complexityMax,
-    tokenProfileMin: agent.tokenProfile.min,
-    tokenProfileMax: agent.tokenProfile.max,
-    tokenProfileTypical: agent.tokenProfile.typical,
-    preferredModels: agent.preferredModels ?? [],
-    timeoutMs: agent.timeoutMs,
-    maxRetries: agent.maxRetries,
-    isActive: agent.isActive,
-    configSource: agent.configSource,
-    description: agent.description,
-    metadata: agent.metadata,
-  };
-}
-
 function mapTaskRecordToListItem(record: TaskRecord): TaskListItem {
   return {
     id: record.id,
@@ -109,7 +89,7 @@ export const apiClient = {
     const response = await requestJson<ApiEnvelope<AgentRecord>>(API_ENDPOINTS.agents, {
       method: 'POST',
       headers: defaultHeaders,
-      body: JSON.stringify(toAgentPayload(agent)),
+      body: JSON.stringify(agent),
     });
     return response.data;
   },
@@ -118,7 +98,7 @@ export const apiClient = {
     const response = await requestJson<ApiEnvelope<AgentRecord>>(`${API_ENDPOINTS.agents}/${id}`, {
       method: 'PUT',
       headers: defaultHeaders,
-      body: JSON.stringify(toAgentPayload(agent)),
+      body: JSON.stringify(agent),
     });
     return response.data;
   },

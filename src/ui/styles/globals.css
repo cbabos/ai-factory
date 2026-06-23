@@ -59,7 +59,7 @@ body {
 
 .tasks-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.18fr) minmax(360px, 0.82fr);
+  grid-template-columns: minmax(0, 1fr) minmax(380px, 420px);
   gap: 1.25rem;
   align-items: start;
 }
@@ -68,12 +68,13 @@ body {
 .tasks-table-row {
   display: grid;
   grid-template-columns:
-    minmax(260px, 1.55fr)
-    minmax(86px, 0.65fr)
-    minmax(104px, 0.75fr)
-    minmax(132px, 0.85fr)
-    minmax(86px, 0.7fr);
-  gap: 1rem;
+    minmax(210px, 1fr)
+    minmax(72px, 0.45fr)
+    minmax(88px, 0.5fr)
+    minmax(104px, 0.6fr)
+    minmax(68px, 0.4fr);
+  gap: 0.75rem;
+  align-items: start;
 }
 
 .tasks-table-header {

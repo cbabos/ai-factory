@@ -376,13 +376,15 @@ export default function Tasks() {
                             variant="primary"
                             size="sm"
                             onClick={() => handleSelectTask(task.id)}
+                            className="px-2"
                           >
-                            Inspect
+                            View
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => navigate(`/tasks/${task.id}`)}
+                            className="px-2"
                           >
                             Open
                           </Button>

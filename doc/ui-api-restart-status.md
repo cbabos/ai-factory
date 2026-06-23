@@ -20,7 +20,7 @@ Restart the UI shell and API integration cleanly while preserving the reusable t
 - [x] Add live task polling and markdown conversation rendering
 - [x] Finish backend runtime wiring for editable entities
 - [x] Serve the built UI from the factory runtime
-- [ ] Restore trustworthy UI tests around the rebuilt shell and client layer
+- [x] Restore trustworthy UI tests around the rebuilt shell and client layer
 
 ## Current Status
 
@@ -36,11 +36,11 @@ Restart the UI shell and API integration cleanly while preserving the reusable t
 - Backend task/agent wiring now reaches the API server through initialized stores/repositories
 - Runtime startup now seeds persisted agent/model records from config and prefers the editable stores on boot
 - API runtime now serves the built `src/ui/dist` bundle when it exists and falls back to `index.html` for client routes
+- Vitest now targets a smaller trusted UI contract suite focused on theme config, route contracts, and shared API client behavior
 
 ### In Progress
 
 - Planning the next pass on task detail UX, especially subtask drill-down and richer thread metadata
-- Planning the rebuild of trustworthy tests around the routed shell and shared API client
 
 ### Known Gaps
 
@@ -48,3 +48,4 @@ Restart the UI shell and API integration cleanly while preserving the reusable t
 - The factory still loads `factory.config.json` as the bootstrap seed for persisted entities and provider setup
 - Task detail/subtask browsing is still incomplete
 - The runtime only serves the UI after `src/ui` has been built to `src/ui/dist`
+- Legacy generated component/page tests remain out of scope until they are rewritten against the actual rendered UI contracts

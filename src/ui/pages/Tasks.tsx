@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -73,6 +73,152 @@ function getTaskAge(task: TaskListItem): string {
   return `${Math.floor(elapsedHours / 24)}d ago`;
 }
 
+function areTaskListsEquivalent(left: TaskListItem[], right: TaskListItem[]): boolean {
+  if (left.length !== right.length) return false;
+
+  return left.every((task, index) => {
+    const other = right[index];
+    return other !== undefined &&
+      task.id === other.id &&
+      task.status === other.status &&
+      task.updatedAt === other.updatedAt &&
+      task.cost === other.cost &&
+      task.tokens === other.tokens;
+  });
+}
+
+interface ThreadPaneProps {
+  selectedTask: TaskDetails | null;
+  loadingDetails: boolean;
+  detailsError: string | null;
+}
+
+const ThreadPane = memo(function ThreadPane({
+  selectedTask,
+  loadingDetails,
+  detailsError,
+}: ThreadPaneProps) {
+  return (
+    <aside className="rounded-cyber border border-accent-primary/20 bg-panel/70">
+      <div className="border-b border-accent-primary/20 px-5 py-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.2em] text-text-muted">
+              Thread
+            </div>
+            <h3 className="mt-1 line-clamp-2 text-lg font-bold text-text-primary">
+              {selectedTask?.description ?? 'Select a task'}
+            </h3>
+          </div>
+          {selectedTask ? (
+            <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${statusBadgeClasses[selectedTask.status]}`}>
+              {selectedTask.status}
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="max-h-[760px] overflow-y-auto px-5 py-4">
+        {loadingDetails ? (
+          <div className="py-12 text-center text-text-secondary">
+            Loading thread...
+          </div>
+        ) : detailsError ? (
+          <div className="rounded-cyber border border-accent-danger/30 bg-accent-danger/10 px-4 py-3 text-sm text-accent-danger">
+            {detailsError}
+          </div>
+        ) : !selectedTask ? (
+          <div className="py-12 text-center text-text-secondary">
+            Select a task to inspect its conversation.
+          </div>
+        ) : (
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="rounded-cyber border border-accent-primary/15 bg-bg-secondary/30 px-3 py-2">
+                <div className="text-[10px] uppercase tracking-wide text-text-muted">Cost</div>
+                <div className="mt-1 font-mono text-accent-secondary">
+                  {formatCost(selectedTask.cost)}
+                </div>
+              </div>
+              <div className="rounded-cyber border border-accent-primary/15 bg-bg-secondary/30 px-3 py-2">
+                <div className="text-[10px] uppercase tracking-wide text-text-muted">Tokens</div>
+                <div className="mt-1 font-mono text-accent-tertiary">
+                  {formatNumber(selectedTask.tokens)}
+                </div>
+              </div>
+              <div className="rounded-cyber border border-accent-primary/15 bg-bg-secondary/30 px-3 py-2">
+                <div className="text-[10px] uppercase tracking-wide text-text-muted">Origin</div>
+                <div className="mt-1 text-text-primary">
+                  {selectedTask.originChannel ?? 'unknown'}
+                </div>
+              </div>
+              <div className="rounded-cyber border border-accent-primary/15 bg-bg-secondary/30 px-3 py-2">
+                <div className="text-[10px] uppercase tracking-wide text-text-muted">Priority</div>
+                <div className="mt-1 text-text-primary">
+                  {selectedTask.priority}
+                </div>
+              </div>
+            </div>
+
+            {selectedTask.output !== undefined ? (
+              <div>
+                <div className="mb-2 text-[11px] uppercase tracking-[0.18em] text-text-muted">
+                  Output
+                </div>
+                <pre className="max-h-52 overflow-auto rounded-cyber border border-accent-primary/15 bg-bg-secondary/40 p-3 text-xs text-text-secondary">
+                  {typeof selectedTask.output === 'string'
+                    ? selectedTask.output
+                    : JSON.stringify(selectedTask.output, null, 2)}
+                </pre>
+              </div>
+            ) : null}
+
+            <div>
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-text-muted">
+                  Conversation
+                </div>
+                <span className="text-xs text-text-secondary">
+                  {selectedTask.conversation.length} entries
+                </span>
+              </div>
+
+              {selectedTask.conversation.length === 0 ? (
+                <div className="rounded-cyber border border-accent-primary/15 bg-bg-secondary/30 px-4 py-8 text-center text-sm text-text-secondary">
+                  No conversation captured for this task yet.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {selectedTask.conversation.map((turn, index) => (
+                    <article
+                      key={`${turn.timestamp}-${index}`}
+                      className="rounded-cyber border border-accent-primary/15 bg-bg-secondary/30 p-4"
+                    >
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-accent-primary">
+                          {turn.role}
+                        </span>
+                        <span className="text-xs text-text-secondary">
+                          {formatDate(turn.timestamp)}
+                        </span>
+                      </div>
+                      <div className="prose prose-invert max-w-none text-sm text-text-primary prose-pre:bg-panel/70 prose-pre:border prose-pre:border-accent-primary/20 prose-code:text-accent-secondary prose-headings:text-accent-primary prose-strong:text-text-primary prose-a:text-accent-secondary">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {turn.content}
+                        </ReactMarkdown>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </aside>
+  );
+});
+
 export default function Tasks() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -107,8 +253,10 @@ export default function Tasks() {
     setSearchParams(nextSearchParams);
   }, [searchParams, setSearchParams]);
 
-  const fetchTasks = useCallback(async (page = 1) => {
-    setLoadingTasks(true);
+  const fetchTasks = useCallback(async (page = 1, showLoading = true) => {
+    if (showLoading) {
+      setLoadingTasks(true);
+    }
     setError(null);
     try {
       const data = await apiClient.listTasks({
@@ -117,25 +265,33 @@ export default function Tasks() {
         status: isTaskStatus(statusFilter) ? statusFilter : undefined,
         priority: isTaskPriority(priorityFilter) ? priorityFilter : undefined,
       });
-      setTasks(data.items);
+      setTasks((currentTasks) =>
+        areTaskListsEquivalent(currentTasks, data.items) ? currentTasks : data.items,
+      );
       setTotalPages(Math.max(1, Math.ceil(data.total / PAGE_SIZE)));
       setCurrentPage(page);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load tasks');
     } finally {
-      setLoadingTasks(false);
+      if (showLoading) {
+        setLoadingTasks(false);
+      }
     }
   }, [priorityFilter, statusFilter]);
 
-  const loadTaskDetails = useCallback(async (taskId: string) => {
-    setLoadingDetails(true);
+  const loadTaskDetails = useCallback(async (taskId: string, showLoading = true) => {
+    if (showLoading) {
+      setLoadingDetails(true);
+    }
     setDetailsError(null);
     try {
       setSelectedTask(await apiClient.getTask(taskId));
     } catch (err) {
       setDetailsError(err instanceof Error ? err.message : 'Failed to load task details');
     } finally {
-      setLoadingDetails(false);
+      if (showLoading) {
+        setLoadingDetails(false);
+      }
     }
   }, []);
 
@@ -145,16 +301,13 @@ export default function Tasks() {
 
   useEffect(() => {
     const pollId = window.setInterval(() => {
-      void fetchTasks(currentPage);
-      if (selectedTaskId) {
-        void loadTaskDetails(selectedTaskId);
-      }
+      void fetchTasks(currentPage, false);
     }, TASK_POLL_INTERVAL_MS);
 
     return () => {
       window.clearInterval(pollId);
     };
-  }, [currentPage, fetchTasks, loadTaskDetails, selectedTaskId]);
+  }, [currentPage, fetchTasks]);
 
   const visibleTasks = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -166,20 +319,39 @@ export default function Tasks() {
     );
   }, [searchTerm, tasks]);
 
+  const selectedListTask = useMemo(() => {
+    if (!selectedTaskId) return undefined;
+    return tasks.find((task) => task.id === selectedTaskId);
+  }, [selectedTaskId, tasks]);
+
   useEffect(() => {
-    if (selectedTaskId) {
-      void loadTaskDetails(selectedTaskId);
+    if (!selectedTaskId) {
+      const firstTask = visibleTasks[0];
+      if (firstTask) {
+        setSelectedTask(null);
+        updateSearchParam('task', firstTask.id, '');
+      } else {
+        setSelectedTask(null);
+      }
       return;
     }
 
-    const firstTask = visibleTasks[0];
-    if (firstTask) {
-      setSelectedTask(null);
-      updateSearchParam('task', firstTask.id, '');
-    } else {
-      setSelectedTask(null);
+    const isNewSelection = selectedTask?.id !== selectedTaskId;
+    const hasUpdated = selectedListTask !== undefined &&
+      selectedTask !== null &&
+      selectedListTask.updatedAt > selectedTask.updatedAt;
+
+    if (isNewSelection || hasUpdated) {
+      void loadTaskDetails(selectedTaskId, isNewSelection);
     }
-  }, [loadTaskDetails, selectedTaskId, updateSearchParam, visibleTasks]);
+  }, [
+    loadTaskDetails,
+    selectedListTask,
+    selectedTask,
+    selectedTaskId,
+    updateSearchParam,
+    visibleTasks,
+  ]);
 
   const handleSelectTask = (taskId: string) => {
     updateSearchParam('task', taskId, '');
@@ -197,9 +369,6 @@ export default function Tasks() {
 
   const handleRefresh = () => {
     void fetchTasks(currentPage);
-    if (selectedTaskId) {
-      void loadTaskDetails(selectedTaskId);
-    }
   };
 
   const statusCounts = useMemo(() => {
@@ -473,123 +642,11 @@ export default function Tasks() {
             )}
           </div>
 
-          <aside className="rounded-cyber border border-accent-primary/20 bg-panel/70">
-            <div className="border-b border-accent-primary/20 px-5 py-4">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="text-[11px] uppercase tracking-[0.2em] text-text-muted">
-                    Thread
-                  </div>
-                  <h3 className="mt-1 line-clamp-2 text-lg font-bold text-text-primary">
-                    {selectedTask?.description ?? 'Select a task'}
-                  </h3>
-                </div>
-                {selectedTask ? (
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${statusBadgeClasses[selectedTask.status]}`}>
-                    {selectedTask.status}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="max-h-[760px] overflow-y-auto px-5 py-4">
-              {loadingDetails ? (
-                <div className="py-12 text-center text-text-secondary">
-                  Loading thread...
-                </div>
-              ) : detailsError ? (
-                <div className="rounded-cyber border border-accent-danger/30 bg-accent-danger/10 px-4 py-3 text-sm text-accent-danger">
-                  {detailsError}
-                </div>
-              ) : !selectedTask ? (
-                <div className="py-12 text-center text-text-secondary">
-                  Select a task to inspect its conversation.
-                </div>
-              ) : (
-                <div className="space-y-5">
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-cyber border border-accent-primary/15 bg-bg-secondary/30 px-3 py-2">
-                      <div className="text-[10px] uppercase tracking-wide text-text-muted">Cost</div>
-                      <div className="mt-1 font-mono text-accent-secondary">
-                        {formatCost(selectedTask.cost)}
-                      </div>
-                    </div>
-                    <div className="rounded-cyber border border-accent-primary/15 bg-bg-secondary/30 px-3 py-2">
-                      <div className="text-[10px] uppercase tracking-wide text-text-muted">Tokens</div>
-                      <div className="mt-1 font-mono text-accent-tertiary">
-                        {formatNumber(selectedTask.tokens)}
-                      </div>
-                    </div>
-                    <div className="rounded-cyber border border-accent-primary/15 bg-bg-secondary/30 px-3 py-2">
-                      <div className="text-[10px] uppercase tracking-wide text-text-muted">Origin</div>
-                      <div className="mt-1 text-text-primary">
-                        {selectedTask.originChannel ?? 'unknown'}
-                      </div>
-                    </div>
-                    <div className="rounded-cyber border border-accent-primary/15 bg-bg-secondary/30 px-3 py-2">
-                      <div className="text-[10px] uppercase tracking-wide text-text-muted">Priority</div>
-                      <div className="mt-1 text-text-primary">
-                        {selectedTask.priority}
-                      </div>
-                    </div>
-                  </div>
-
-                  {selectedTask.output !== undefined ? (
-                    <div>
-                      <div className="mb-2 text-[11px] uppercase tracking-[0.18em] text-text-muted">
-                        Output
-                      </div>
-                      <pre className="max-h-52 overflow-auto rounded-cyber border border-accent-primary/15 bg-bg-secondary/40 p-3 text-xs text-text-secondary">
-                        {typeof selectedTask.output === 'string'
-                          ? selectedTask.output
-                          : JSON.stringify(selectedTask.output, null, 2)}
-                      </pre>
-                    </div>
-                  ) : null}
-
-                  <div>
-                    <div className="mb-3 flex items-center justify-between">
-                      <div className="text-[11px] uppercase tracking-[0.18em] text-text-muted">
-                        Conversation
-                      </div>
-                      <span className="text-xs text-text-secondary">
-                        {selectedTask.conversation.length} entries
-                      </span>
-                    </div>
-
-                    {selectedTask.conversation.length === 0 ? (
-                      <div className="rounded-cyber border border-accent-primary/15 bg-bg-secondary/30 px-4 py-8 text-center text-sm text-text-secondary">
-                        No conversation captured for this task yet.
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {selectedTask.conversation.map((turn, index) => (
-                          <article
-                            key={`${turn.timestamp}-${index}`}
-                            className="rounded-cyber border border-accent-primary/15 bg-bg-secondary/30 p-4"
-                          >
-                            <div className="mb-3 flex items-center justify-between gap-3">
-                              <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-accent-primary">
-                                {turn.role}
-                              </span>
-                              <span className="text-xs text-text-secondary">
-                                {formatDate(turn.timestamp)}
-                              </span>
-                            </div>
-                            <div className="prose prose-invert max-w-none text-sm text-text-primary prose-pre:bg-panel/70 prose-pre:border prose-pre:border-accent-primary/20 prose-code:text-accent-secondary prose-headings:text-accent-primary prose-strong:text-text-primary prose-a:text-accent-secondary">
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                {turn.content}
-                              </ReactMarkdown>
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </aside>
+          <ThreadPane
+            selectedTask={selectedTask}
+            loadingDetails={loadingDetails}
+            detailsError={detailsError}
+          />
         </div>
       </div>
     </Panel>

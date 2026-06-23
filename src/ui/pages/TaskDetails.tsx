@@ -1,8 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Card } from '../components/layout/Card.js';
+import { ConversationTurnView } from '../components/conversation/ConversationTurnView.js';
 import { Panel } from '../components/layout/Panel.js';
 import { apiClient, type TaskDetails as TaskDetailsRecord } from '../services/index.js';
 
@@ -93,23 +91,10 @@ const TaskDetailsPage: React.FC = () => {
             <p className="text-text-secondary">No conversation captured for this task yet.</p>
           ) : (
             task.conversation.map((turn, index) => (
-              <Card
+              <ConversationTurnView
                 key={`${turn.timestamp}-${index}`}
-                variant="default"
-                className="border border-accent-primary/20"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="uppercase tracking-wide text-xs text-accent-primary">{turn.role}</span>
-                  <span className="text-xs text-text-secondary">
-                    {new Date(turn.timestamp).toLocaleString()}
-                  </span>
-                </div>
-                <div className="prose prose-invert max-w-none text-sm text-text-primary prose-pre:bg-panel/70 prose-pre:border prose-pre:border-accent-primary/20 prose-code:text-accent-secondary prose-headings:text-accent-primary prose-strong:text-text-primary prose-a:text-accent-secondary">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {turn.content}
-                  </ReactMarkdown>
-                </div>
-              </Card>
+                turn={turn}
+              />
             ))
           )}
         </div>

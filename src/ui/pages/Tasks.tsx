@@ -1,8 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/controls/Button.js';
+import { ConversationTurnView } from '../components/conversation/ConversationTurnView.js';
 import { Input } from '../components/forms/Input.js';
 import { Select } from '../components/forms/Select.js';
 import { Panel } from '../components/layout/Panel.js';
@@ -190,24 +189,10 @@ const ThreadPane = memo(function ThreadPane({
               ) : (
                 <div className="space-y-3">
                   {selectedTask.conversation.map((turn, index) => (
-                    <article
+                    <ConversationTurnView
                       key={`${turn.timestamp}-${index}`}
-                      className="rounded-cyber border border-accent-primary/15 bg-bg-secondary/30 p-4"
-                    >
-                      <div className="mb-3 flex items-center justify-between gap-3">
-                        <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-accent-primary">
-                          {turn.role}
-                        </span>
-                        <span className="text-xs text-text-secondary">
-                          {formatDate(turn.timestamp)}
-                        </span>
-                      </div>
-                      <div className="prose prose-invert max-w-none text-sm text-text-primary prose-pre:bg-panel/70 prose-pre:border prose-pre:border-accent-primary/20 prose-code:text-accent-secondary prose-headings:text-accent-primary prose-strong:text-text-primary prose-a:text-accent-secondary">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {turn.content}
-                        </ReactMarkdown>
-                      </div>
-                    </article>
+                      turn={turn}
+                    />
                   ))}
                 </div>
               )}

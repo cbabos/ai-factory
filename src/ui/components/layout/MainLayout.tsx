@@ -15,8 +15,8 @@ const navigationItems = [
 
 export const MainLayout: React.FC<MainLayoutProps> = ({ children, title = 'AI Factory' }) => {
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-[#00f3ff]">
-      <header className="border-b border-[#00f3ff]/20 bg-[#0a0a12]/95 backdrop-blur-sm sticky top-0 z-40">
+    <div className="min-h-screen bg-panel text-text-primary transition-colors">
+      <header className="sticky top-0 z-40 border-b border-accent-primary/20 bg-panel/95 backdrop-blur-sm transition-colors">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-6">
             <h1 className="text-2xl font-bold tracking-tight">

@@ -15,7 +15,6 @@ export const useTheme = (): UseThemeResult => {
     (themeId: ThemeId): void => {
       setTheme(themeId);
       localStorage.setItem('currentTheme', themeId);
-      document.documentElement.setAttribute('data-theme', themeId);
     },
     [setTheme],
   );

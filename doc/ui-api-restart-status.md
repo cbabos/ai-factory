@@ -41,6 +41,7 @@ Restart the UI shell and API integration cleanly while preserving the reusable t
 - Runtime model discovery now persists newly discovered models into the editable model store for UI consumption
 - Models screen now uses a table-first management view so provider, model ID, costs, capabilities, source, and status are visible at a glance
 - Agents CRUD form now generates IDs from names, uses runtime model choices, removes derived/noisy fields, and exposes prompt/config metadata in a concise editor
+- Tasks screen now uses a dense split view with inline filters, status counters, task inspection, thread preview, markdown conversation rendering, costs, tokens, and polling
 
 ### In Progress
 
@@ -51,6 +52,7 @@ Restart the UI shell and API integration cleanly while preserving the reusable t
 - Root repo lint still has pre-existing non-UI failures in the core/api work
 - The factory still loads `factory.config.json` as the bootstrap seed for persisted entities and provider setup
 - Task detail/subtask browsing is still incomplete
+- Tasks can inspect the captured task conversation, but the API does not yet expose first-class subtask records for selection/drill-down
 - Agent prompt/config metadata is persisted by the UI/API but is not yet consumed by runtime agent execution
 - The runtime only serves the UI after `src/ui` has been built to `src/ui/dist`
 - Legacy generated component/page tests remain out of scope until they are rewritten against the actual rendered UI contracts

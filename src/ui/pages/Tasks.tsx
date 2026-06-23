@@ -228,7 +228,7 @@ export default function Tasks() {
         )}
 
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="grid w-full gap-3 md:grid-cols-[minmax(220px,1fr)_180px_180px] xl:max-w-4xl">
+          <div className="tasks-toolbar-grid">
             <Input
               label="Search"
               value={searchTerm}
@@ -273,7 +273,7 @@ export default function Tasks() {
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="tasks-status-grid">
           {Object.entries(statusCounts).map(([status, count]) => (
             <div
               key={status}
@@ -289,9 +289,9 @@ export default function Tasks() {
           ))}
         </div>
 
-        <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.35fr)_minmax(420px,0.9fr)]">
+        <div className="tasks-layout">
           <div className="rounded-cyber border border-accent-primary/20 overflow-hidden bg-panel/70">
-            <div className="hidden lg:grid grid-cols-[1.5fr_0.7fr_0.8fr_0.9fr_0.8fr] gap-4 px-5 py-3 bg-accent-primary/5 border-b border-accent-primary/20 text-[11px] font-bold tracking-[0.2em] uppercase text-text-secondary">
+            <div className="tasks-table-header bg-accent-primary/5 border-b border-accent-primary/20 text-[11px] font-bold tracking-[0.2em] uppercase text-text-secondary">
               <span>Task</span>
               <span>Status</span>
               <span>Cost</span>
@@ -331,7 +331,7 @@ export default function Tasks() {
                           : 'hover:bg-accent-primary/5'
                       }`}
                     >
-                      <div className="hidden lg:grid grid-cols-[1.5fr_0.7fr_0.8fr_0.9fr_0.8fr] gap-4 items-start">
+                      <div className="tasks-table-row">
                         <button
                           type="button"
                           onClick={() => handleSelectTask(task.id)}
@@ -389,7 +389,7 @@ export default function Tasks() {
                         </div>
                       </div>
 
-                      <div className="lg:hidden space-y-3">
+                      <div className="tasks-mobile-row space-y-3">
                         <div className="flex items-start justify-between gap-3">
                           <button
                             type="button"

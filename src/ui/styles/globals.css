@@ -42,3 +42,78 @@ body {
     background-color 200ms ease,
     color 200ms ease;
 }
+
+.tasks-toolbar-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 180px 180px;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 64rem;
+}
+
+.tasks-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.tasks-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.18fr) minmax(360px, 0.82fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.tasks-table-header,
+.tasks-table-row {
+  display: grid;
+  grid-template-columns:
+    minmax(260px, 1.55fr)
+    minmax(86px, 0.65fr)
+    minmax(104px, 0.75fr)
+    minmax(132px, 0.85fr)
+    minmax(86px, 0.7fr);
+  gap: 1rem;
+}
+
+.tasks-table-header {
+  padding: 0.75rem 1.25rem;
+}
+
+.tasks-mobile-row {
+  display: none;
+}
+
+@media (max-width: 1180px) {
+  .tasks-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .tasks-toolbar-grid {
+    grid-template-columns: 1fr;
+    max-width: none;
+  }
+
+  .tasks-status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1023px) {
+  .tasks-table-header,
+  .tasks-table-row {
+    display: none;
+  }
+
+  .tasks-mobile-row {
+    display: block;
+  }
+}
+
+@media (max-width: 560px) {
+  .tasks-status-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -121,10 +121,10 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
         selectRef.current.value = value;
       }
 
-      if (onChange && selectRef.current) {
+      if (onChange) {
         onChange({
-          target: selectRef.current,
-          currentTarget: selectRef.current,
+          target: { value },
+          currentTarget: { value },
         } as React.ChangeEvent<HTMLSelectElement>);
       }
     };

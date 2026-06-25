@@ -21,17 +21,22 @@ export class OpenAICaller extends LLMCaller implements ILLMCaller {
     }
     messages.push({ role: "user", content: prompt });
 
-    const response = await this.client.chat.completions.create({
-      model: options.model,
-      messages,
-      temperature: options.temperature,
-      max_tokens: options.maxTokens,
-      response_format:
-        options.responseFormat === "json"
-          ? { type: "json_object" }
-          : undefined,
-      stop: options.stopSequences,
-    });
+    const response = await this.client.chat.completions.create(
+      {
+        model: options.model,
+        messages,
+        temperature: options.temperature,
+        max_tokens: options.maxTokens,
+        response_format:
+          options.responseFormat === "json"
+            ? { type: "json_object" }
+            : undefined,
+        stop: options.stopSequences,
+      },
+      {
+        timeout: options.timeoutMs,
+      },
+    );
 
     const choice = response.choices[0];
     return {

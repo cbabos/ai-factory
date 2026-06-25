@@ -13,7 +13,7 @@ import type {
   IWorkflowRepository,
   IWorkflowRunRepository,
 } from "./workflow-repository.js";
-import type { SSEEvent, ApiServerOptions } from "./api-types.js";
+import type { SSEEvent, ApiServerOptions, AgentRuntimeSync } from "./api-types.js";
 import { ApiError, isApiError } from "./api-types.js";
 import type { FactoryEvent } from "./types.js";
 import {
@@ -85,6 +85,7 @@ export class ApiServer {
   private budgetTracker?: BudgetTracker;
   private humanTaskResponder?: (humanTaskId: string, response: unknown) => Promise<FinalResult>;
   private taskSubmitter?: (input: Record<string, unknown>) => Promise<Task>;
+  private agentRuntimeSync?: (event: AgentRuntimeSync) => void;
 
   private sseClients = new Map<string, { res: Response; interval: NodeJS.Timeout }>();
   private sseInterval?: NodeJS.Timeout;
@@ -278,6 +279,7 @@ export class ApiServer {
     budgetTracker?: BudgetTracker,
     humanTaskResponder?: (humanTaskId: string, response: unknown) => Promise<FinalResult>,
     taskSubmitter?: (input: Record<string, unknown>) => Promise<Task>,
+    agentRuntimeSync?: (event: AgentRuntimeSync) => void,
   ): Promise<void> {
     this.agentStore = agentStore;
     this.modelStore = modelStore;
@@ -292,6 +294,7 @@ export class ApiServer {
     this.budgetTracker = budgetTracker;
     this.humanTaskResponder = humanTaskResponder;
     this.taskSubmitter = taskSubmitter;
+    this.agentRuntimeSync = agentRuntimeSync;
 
     if (this.agentStore) {
       this.app.set("agentStore", this.agentStore);
@@ -319,6 +322,9 @@ export class ApiServer {
     }
     if (this.taskSubmitter) {
       this.app.set("taskSubmitter", this.taskSubmitter);
+    }
+    if (this.agentRuntimeSync) {
+      this.app.set("agentRuntimeSync", this.agentRuntimeSync);
     }
 
     if (this.enableSse && this.agentRegistry) {

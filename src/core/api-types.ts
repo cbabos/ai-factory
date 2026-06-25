@@ -88,6 +88,16 @@ export interface AgentUpdatedEvent extends SSEEvent {
   };
 }
 
+export type AgentRuntimeSync =
+  | {
+      action: "upsert";
+      agentId: string;
+    }
+  | {
+      action: "delete";
+      agentId: string;
+    };
+
 export type SSEEventType =
   | TaskCreatedEvent
   | TaskCompletedEvent

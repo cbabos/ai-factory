@@ -57,6 +57,17 @@ const formatAvailabilityLabel = (isActive: boolean): string => {
   return isActive ? 'available' : 'inactive';
 };
 
+const formatMinutes = (timeoutMs: number): string => {
+  const minutes = timeoutMs / 60000;
+  if (minutes >= 10) {
+    return `${minutes.toFixed(0)} min timeout`;
+  }
+  if (minutes >= 1) {
+    return `${minutes.toFixed(1).replace(/\.0$/, '')} min timeout`;
+  }
+  return `${minutes.toFixed(2).replace(/0$/, '').replace(/\.0$/, '')} min timeout`;
+};
+
 const AgentsPage: React.FC<AgentsPageProps> = ({
   title = 'Agents',
   subtitle = 'Manage AI agent configurations',
@@ -354,10 +365,10 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
                             typical {agent.tokenProfile.typical}
                           </span>
                           <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] font-mono text-text-primary">
-                            {(agent.timeoutMs / 1000).toFixed(0)}s timeout
+                            {formatMinutes(agent.timeoutMs)}
                           </span>
                           <span className="rounded-full border border-accent-secondary/20 bg-accent-secondary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-accent-secondary">
-                            {agent.maxRetries} retries
+                            {agent.maxRetries} iterations
                           </span>
                           <span
                             className={`rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide ${
@@ -482,10 +493,10 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
                         typical {agent.tokenProfile.typical}
                       </span>
                       <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] font-mono text-text-primary">
-                        {(agent.timeoutMs / 1000).toFixed(0)}s timeout
+                        {formatMinutes(agent.timeoutMs)}
                       </span>
                       <span className="rounded-full border border-accent-secondary/20 bg-accent-secondary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-accent-secondary">
-                        {agent.maxRetries} retries
+                        {agent.maxRetries} iterations
                       </span>
                     </div>
 

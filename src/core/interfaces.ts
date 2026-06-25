@@ -158,6 +158,7 @@ export interface LLMCallOptions {
   systemPrompt?: string;
   temperature?: number;
   maxTokens?: number;
+  timeoutMs?: number;
   responseFormat?: "text" | "json";
   stopSequences?: string[];
 }

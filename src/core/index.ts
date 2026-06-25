@@ -39,3 +39,4 @@ export * from "./sqlite-config-store.js";
 export * from "./agent-store.js";
 export * from "./model-store.js";
 export * from "./api-server.js";
+export * from "./routing-llm-caller.js";

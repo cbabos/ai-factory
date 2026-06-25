@@ -3,7 +3,7 @@ import type { IAgent, ILLMCaller, LLMCallOptions } from "./interfaces.js";
 import type { IToolRegistry, ToolCall, ToolResult } from "../tools/interfaces.js";
 import { PipelineStep } from "./pipeline-step.js";
 
-const MAX_TOOL_ITERATIONS = 5;
+const DEFAULT_TOOL_ITERATIONS = 5;
 
 function tryJsonParse(text: string): Record<string, unknown> | undefined {
   try {
@@ -135,7 +135,8 @@ export abstract class Agent
             let lastContent = "";
             const executedToolKeys = new Set<string>();
 
-            while (iteration < MAX_TOOL_ITERATIONS) {
+            const maxIterations = Math.max(1, this.manifest.maxRetries || DEFAULT_TOOL_ITERATIONS);
+            while (iteration < maxIterations) {
               conversation.push({ role: "user", content: prompt, timestamp: Date.now() });
 
               const options: LLMCallOptions = {
@@ -143,6 +144,7 @@ export abstract class Agent
                 provider: currentModel.provider,
                 systemPrompt,
                 maxTokens: this.manifest.tokenProfile.max,
+                timeoutMs: this.manifest.timeoutMs,
               };
 
               const result = await this.llmCaller.call(prompt, options);
@@ -155,7 +157,7 @@ export abstract class Agent
               if (toolCalls.length === 0 || !this.tools) {
                 // If the model emitted something that looks like a tool call but we
                 // could not parse it, keep looping so we can feed it back as an error.
-                if (looksLikeToolCall(lastContent) && iteration + 1 < MAX_TOOL_ITERATIONS) {
+                if (looksLikeToolCall(lastContent) && iteration + 1 < maxIterations) {
                   prompt = `${basePrompt}\n\nYour previous response contained an invalid or unparsable tool block:\n${lastContent}\n\nPlease provide a valid tool call using \`call:tool:<name>\` followed by a JSON object, or answer directly if no tool is needed.`;
                   iteration++;
                   continue;
@@ -168,7 +170,7 @@ export abstract class Agent
                 return executedToolKeys.has(key);
               });
 
-              if (allRepeated && iteration + 1 < MAX_TOOL_ITERATIONS) {
+              if (allRepeated && iteration + 1 < maxIterations) {
                 const outputPath = subTask.context?.outputPath as string | undefined;
                 const writeHint = outputPath
                   ? ` The task requires writing the result to ${outputPath}. Call writeFile with that path and the content you already have.`

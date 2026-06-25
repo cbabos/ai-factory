@@ -11,6 +11,7 @@ import {
   IRepository,
   ModelInfo,
   WorkflowEngine,
+  RoutingLLMCaller,
 } from "./core/index.js";
 import type { IAgent } from "./core/index.js";
 import {
@@ -48,6 +49,7 @@ import {
   createDeepseekCaller,
 } from "./llm/index.js";
 import {
+  ConfigurableAgent,
   SearchAgent,
   AnalysisAgent,
   SummarizerAgent,
@@ -68,6 +70,8 @@ import { SQLiteModelStore } from "./core/model-store.js";
 import { SQLiteConfigStore } from "./core/sqlite-config-store.js";
 import { ApiServer } from "./core/api-server.js";
 import { setSettingsStore as setupSettingsStore } from "./core/api-handlers/settings.js";
+import type { AgentRecord, CreateAgentInput } from "./core/agent-store.js";
+import type { AgentRuntimeSync } from "./core/api-types.js";
 
 export interface AIFactoryOptions {
   config: FactoryConfig;
@@ -108,6 +112,7 @@ export class AIFactory {
   private breakers = new Map<Provider, CircuitBreaker>();
   private defaultModel: string;
   private defaultCaller: ILLMCaller;
+  private routingCaller?: ILLMCaller;
   private dispatcher: Dispatcher;
   private aggregator: Aggregator;
   private workflowEngine?: WorkflowEngine;
@@ -171,9 +176,6 @@ export class AIFactory {
     this.budgetTracker.initialize(providers);
 
     this.agentRegistry = new AgentRegistry(this.eventBus);
-    for (const manifest of runtimeAgents) {
-      this.agentRegistry.register(manifest);
-    }
 
     this.metricsCollector = new MetricsCollector(this.eventBus);
 
@@ -183,16 +185,17 @@ export class AIFactory {
       throw new Error("No LLM callers configured");
     }
     this.defaultCaller = defaultCaller;
+    this.routingCaller = new RoutingLLMCaller(this.callers);
     this.defaultModel = config.complexity.estimatorModel ?? "";
 
     // `agents` and `dispatcher` are rebuilt after initialize() discovers which
     // models are actually available, so the runtime can fall back to the first
     // available model when the config does not name one.
-    const agents = this.buildAgents(defaultCaller, this.tools);
-    this.agents = agents;
+    this.agents = new Map<string, IAgent>();
+    this.loadRuntimeAgents(runtimeAgents);
     this.dispatcher = new Dispatcher(
       this.agentRegistry,
-      agents,
+      this.agents,
       config.dispatch.maxConcurrency,
       async (subTask, result) => {
         if (!this.taskRepository || !result.conversation || result.conversation.length === 0) {
@@ -253,6 +256,7 @@ export class AIFactory {
         this.budgetTracker,
         async (humanTaskId, response) => this.respondToHumanTask(humanTaskId, response),
         async (input) => this.submitApiTask(input),
+        (event) => this.syncRuntimeAgents(event),
       );
     }
 
@@ -297,6 +301,16 @@ export class AIFactory {
 
     this.orchestrator = this.buildOrchestrator(mergedCatalog);
     this.workflowEngine = this.buildWorkflowEngine(mergedCatalog);
+  }
+
+  private syncRuntimeAgents(_event: AgentRuntimeSync): void {
+    if (this.agentStore) {
+      const runtimeAgents = this.resolveRuntimeAgents(this.config.agents);
+      this.loadRuntimeAgents(runtimeAgents);
+      return;
+    }
+
+    this.loadRuntimeAgents(this.resolveRuntimeAgents(this.config.agents));
   }
 
   async start(): Promise<void> {
@@ -647,6 +661,91 @@ export class AIFactory {
     return storedAgents.length > 0 ? storedAgents : fallbackAgents;
   }
 
+  private loadRuntimeAgents(runtimeAgents: FactoryConfig["agents"]): void {
+    for (const manifest of this.agentRegistry.getAll()) {
+      this.agentRegistry.unregister(manifest.id);
+    }
+    this.agents.clear();
+
+    for (const manifest of runtimeAgents) {
+      this.agentRegistry.register(manifest);
+      const configuredAgent = this.buildConfigurableAgentFromStore(manifest.id);
+      const executable = configuredAgent ?? this.buildBuiltinAgent(manifest.id, this.routingCaller ?? this.defaultCaller, this.tools);
+      if (executable) {
+        this.agents.set(manifest.id, executable);
+      }
+    }
+  }
+
+  private buildConfigurableAgentFromStore(agentId: string): IAgent | undefined {
+    if (!this.agentStore || !this.routingCaller) {
+      return undefined;
+    }
+
+    const record = this.agentStore.get(agentId);
+    if (!record || !record.isActive) {
+      return undefined;
+    }
+
+    if (this.isBuiltinAgentId(agentId)) {
+      return undefined;
+    }
+
+    return new ConfigurableAgent(
+      this.agentRecordToCreateInput(record),
+      this.routingCaller,
+      this.tools,
+    );
+  }
+
+  private agentRecordToCreateInput(record: AgentRecord): CreateAgentInput & { description?: string; metadata?: Record<string, unknown> } {
+    return {
+      id: record.id,
+      name: record.name,
+      tags: record.tags,
+      complexityMin: record.complexityMin,
+      complexityMax: record.complexityMax,
+      tokenProfileMin: record.tokenProfile.min,
+      tokenProfileMax: record.tokenProfile.max,
+      tokenProfileTypical: record.tokenProfile.typical,
+      preferredModels: record.preferredModels,
+      timeoutMs: record.timeoutMs,
+      maxRetries: record.maxRetries,
+      configSource: record.configSource,
+      description: record.description,
+      metadata: record.metadata,
+    };
+  }
+
+  private isBuiltinAgentId(agentId: string): boolean {
+    return agentId === "search-agent"
+      || agentId === "analysis-agent"
+      || agentId === "summarizer-agent"
+      || agentId === "executor-agent"
+      || agentId === "file-io-agent";
+  }
+
+  private buildBuiltinAgent(
+    agentId: string,
+    caller: ILLMCaller,
+    tools?: IToolRegistry,
+  ): IAgent | undefined {
+    switch (agentId) {
+      case "search-agent":
+        return new SearchAgent(caller, tools);
+      case "analysis-agent":
+        return new AnalysisAgent(caller, tools);
+      case "summarizer-agent":
+        return new SummarizerAgent(caller, tools);
+      case "executor-agent":
+        return new ExecutorAgent(caller, tools);
+      case "file-io-agent":
+        return new FileIOAgent(caller, tools);
+      default:
+        return undefined;
+    }
+  }
+
   private resolveRuntimeModels(fallbackModels: FactoryConfig["models"]): ModelInfo[] {
     if (!this.modelStore) {
       return fallbackModels;
@@ -708,26 +807,6 @@ export class AIFactory {
         discoveredAt,
       });
     }
-  }
-
-  private buildAgents(
-    caller: ILLMCaller,
-    tools?: IToolRegistry,
-  ): Map<string, import("./core/interfaces.js").IAgent> {
-    const agents = new Map<string, import("./core/interfaces.js").IAgent>();
-    const instances = [
-      new SearchAgent(caller, tools),
-      new AnalysisAgent(caller, tools),
-      new SummarizerAgent(caller, tools),
-      new ExecutorAgent(caller, tools),
-      new FileIOAgent(caller, tools),
-    ];
-
-    for (const agent of instances) {
-      agents.set(agent.manifest.id, agent);
-    }
-
-    return agents;
   }
 
   private async onSignal(raw: {

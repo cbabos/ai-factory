@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import type { IAgentStore, AgentRecord } from "../agent-store.js";
 import { ApiError } from "../api-types.js";
+import type { AgentRuntimeSync } from "../api-types.js";
 
 function _agentRecordToDTO(agent: AgentRecord): Record<string, unknown> {
   return {
@@ -48,6 +49,11 @@ function _parseTokenProfile(body: Record<string, unknown>): ParsedTokenProfile |
   }
 
   return { min, max, typical };
+}
+
+function _syncRuntime(req: Request, event: AgentRuntimeSync): void {
+  const sync = req.app.get("agentRuntimeSync") as ((runtimeEvent: AgentRuntimeSync) => void) | undefined;
+  sync?.(event);
 }
 
 export async function listAgents(
@@ -153,6 +159,8 @@ export async function createAgent(
       metadata: body.metadata as Record<string, unknown> | undefined,
     });
 
+    _syncRuntime(req, { action: "upsert", agentId: record.id });
+
     res.status(201).json({ data: _agentRecordToDTO(record) });
   } catch (error) {
     next(error);
@@ -209,6 +217,8 @@ export async function updateAgent(
       isActive: updates.isActive as boolean | undefined,
     });
 
+    _syncRuntime(req, { action: "upsert", agentId: record.id });
+
     res.json({ data: _agentRecordToDTO(record) });
   } catch (error) {
     next(error);
@@ -230,6 +240,7 @@ export async function deleteAgent(
     }
 
     store.softDelete(id as string);
+    _syncRuntime(req, { action: "delete", agentId: id as string });
     res.status(204).send();
   } catch (error) {
     next(error);

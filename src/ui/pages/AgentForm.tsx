@@ -22,8 +22,8 @@ interface AgentFormState {
   tokenTypical: number;
   tokenMax: number;
   preferredModels: string[];
-  timeoutMs: number;
-  maxRetries: number;
+  timeoutMinutes: number;
+  iterationCount: number;
   isActive: boolean;
   systemPrompt: string;
   outputContract: string;
@@ -37,21 +37,6 @@ const complexityOptions = [
   { value: 'balanced', label: 'Balanced (3-7)' },
   { value: 'demanding', label: 'Demanding (5-10)' },
   { value: 'any', label: 'Any complexity (1-10)' },
-];
-
-const timeoutOptions = [
-  { value: '10000', label: '10s' },
-  { value: '30000', label: '30s' },
-  { value: '60000', label: '60s' },
-  { value: '120000', label: '120s' },
-];
-
-const retryOptions = [
-  { value: '0', label: 'No retries' },
-  { value: '1', label: '1 retry' },
-  { value: '2', label: '2 retries' },
-  { value: '3', label: '3 retries' },
-  { value: '5', label: '5 retries' },
 ];
 
 const metadataTextKeys = ['systemPrompt', 'outputContract', 'toolPolicy', 'notes'] as const;
@@ -100,8 +85,8 @@ function createFormState(agent: AgentRecord | null): AgentFormState {
     tokenTypical: agent?.tokenProfile.typical ?? 750,
     tokenMax: agent?.tokenProfile.max ?? 1500,
     preferredModels: agent?.preferredModels ?? [],
-    timeoutMs: agent?.timeoutMs ?? 30000,
-    maxRetries: agent?.maxRetries ?? 2,
+    timeoutMinutes: agent ? Number((agent.timeoutMs / 60000).toFixed(2)) : 1,
+    iterationCount: agent?.maxRetries ?? 5,
     isActive: agent?.isActive ?? true,
     systemPrompt: stringifyMetadataValue(metadata.systemPrompt),
     outputContract: stringifyMetadataValue(metadata.outputContract),
@@ -200,6 +185,16 @@ const AgentForm: React.FC<AgentFormProps> = ({
       return;
     }
 
+    if (formData.iterationCount < 1 || !Number.isInteger(formData.iterationCount)) {
+      setError('Iteration count must be a whole number greater than or equal to 1');
+      return;
+    }
+
+    if (formData.timeoutMinutes <= 0) {
+      setError('Timeout must be greater than 0 minutes');
+      return;
+    }
+
     let metadata: Record<string, unknown>;
     try {
       metadata = parseExtraMetadata(formData.extraMetadataJson);
@@ -227,8 +222,8 @@ const AgentForm: React.FC<AgentFormProps> = ({
         max: formData.tokenMax,
       },
       preferredModels: formData.preferredModels,
-      timeoutMs: formData.timeoutMs,
-      maxRetries: formData.maxRetries,
+      timeoutMs: Math.round(formData.timeoutMinutes * 60000),
+      maxRetries: formData.iterationCount,
       isActive: formData.isActive,
       configSource: agent?.configSource ?? 'custom',
       metadata,
@@ -392,19 +387,25 @@ const AgentForm: React.FC<AgentFormProps> = ({
                 onChange={(e) => updateField('tokenMax', Number(e.target.value))}
                 cyberBorder
               />
-              <Select
-                label="Timeout"
-                value={String(formData.timeoutMs)}
-                options={timeoutOptions}
-                onChange={(e) => updateField('timeoutMs', Number(e.target.value))}
+              <Input
+                label="Timeout (Minutes)"
+                type="number"
+                min={0.1}
+                step={0.1}
+                value={formData.timeoutMinutes}
+                onChange={(e) => updateField('timeoutMinutes', Number(e.target.value))}
                 cyberBorder
+                helpText="Decimals are allowed. Example: 0.2 = 12 seconds."
               />
-              <Select
-                label="Retries"
-                value={String(formData.maxRetries)}
-                options={retryOptions}
-                onChange={(e) => updateField('maxRetries', Number(e.target.value))}
+              <Input
+                label="Iteration Count"
+                type="number"
+                min={1}
+                step={1}
+                value={formData.iterationCount}
+                onChange={(e) => updateField('iterationCount', Number(e.target.value))}
                 cyberBorder
+                helpText="Controls how many tool-use loops the agent can take before it must finish."
               />
             </div>
           </section>

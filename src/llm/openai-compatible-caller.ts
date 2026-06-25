@@ -33,7 +33,7 @@ export class OpenAICompatibleCaller extends LLMCaller implements ILLMCaller {
           max_tokens: options.maxTokens,
           stop: options.stopSequences,
         },
-        { timeout: 60_000 },
+        { timeout: options.timeoutMs ?? 60_000 },
       );
 
       const choice = response.choices[0];

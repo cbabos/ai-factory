@@ -1,13 +1,41 @@
 # AI Factory
 
-A lightweight, pluggable AI pipeline system. It captures signals from external sources (cron, webhooks, email, Slack, filesystem), routes them through a small agent swarm, and delivers results back to the originating channel.
+A lightweight, pluggable AI pipeline system. It captures signals from external sources (cron, webhooks, email, Slack, filesystem), routes them through either the adaptive agent swarm or a deterministic workflow engine, and delivers results back to the originating channel.
 
 ## What it does
 
 1. **Inbound** — Sensors detect external events and emit `RawSignal` objects.
 2. **Adapt** — Channel-specific adapters normalize signals into `Task` objects.
-3. **Orchestrate** — The `Orchestrator` estimates complexity, decomposes large tasks, selects the cheapest capable model, dispatches to agents, and aggregates results.
+3. **Orchestrate** — The `Orchestrator` estimates complexity, decomposes large tasks, selects the cheapest capable model, dispatches to agents, and aggregates results. Tasks can also opt into deterministic workflow execution with human checkpoints.
 4. **Outbound** — Responders deliver the final result back to the source channel.
+
+## Workflow + HITL status
+
+The project now includes a first-class workflow runtime with:
+
+- versioned workflow definitions and workflow runs in SQLite
+- a visual workflow editor and run detail UI
+- human task inbox and approval/clarification resume flow
+- task-scoped workflow artifacts saved under `out/artifacts/<taskId>/...`
+- seeded workflow `requirements-clarify-and-approve@2` that:
+  - drafts a structured markdown requirements document
+  - derives machine-readable open questions
+  - renders clarification requests as questionnaire fields plus bulk answer fallback
+  - exposes generated documents to approvers through the UI
+
+Current workflow APIs include:
+
+- `GET /api/workflows`
+- `GET /api/workflows/:id`
+- `POST /api/workflows`
+- `PUT /api/workflows/:id`
+- `GET /api/workflow-runs`
+- `GET /api/workflow-runs/:id`
+- `GET /api/human-tasks`
+- `POST /api/human-tasks/:id/respond`
+- `GET /api/artifacts`
+- `GET /api/artifacts/:id`
+- `GET /api/artifacts/:id/content`
 
 The whole system is wired together by `AIFactory` (`src/factory.ts`).
 
@@ -48,6 +76,7 @@ The app starts:
 - a webhook HTTP server on port `3000`
 - a file watcher on `./watched`
 - an SQLite-backed repository at `./ai-factory.db`
+- an API server on port `3001` that serves workflow/task/human-task endpoints and the built UI when available
 
 Press `Ctrl+C` to stop gracefully.
 
@@ -153,4 +182,5 @@ npm run test:watch
 - `.env` — API keys and transport credentials (gitignored).
 - `doc/architecture.md` — design decisions.
 - `doc/next-steps.md` — roadmap and checklist.
+- `doc/workflow-hitl-plan.md` — current workflow/HITL implementation status and follow-up plan.
 - `AGENTS.md` — concise notes for AI agents working in this repo.

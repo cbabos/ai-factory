@@ -1,6 +1,6 @@
 # UI/API Restart Status
 
-Last updated: 2026-06-23
+Last updated: 2026-06-25
 
 ## Goal
 
@@ -42,10 +42,23 @@ Restart the UI shell and API integration cleanly while preserving the reusable t
 - Models screen now uses a table-first management view so provider, model ID, costs, capabilities, source, and status are visible at a glance
 - Agents CRUD form now generates IDs from names, uses runtime model choices, removes derived/noisy fields, and exposes prompt/config metadata in a concise editor
 - Tasks screen now uses a dense split view with inline filters, status counters, task inspection, thread preview, markdown conversation rendering, costs, tokens, and polling
+- Workflow management UI is now live:
+  - workflow list/detail editor
+  - graph-based step editing
+  - run detail view
+  - human task inbox with structured prompt navigator
+- Human task UI now supports:
+  - two-pane prompt/context reading
+  - structure-map navigation
+  - generated document visibility through workflow artifacts
+  - questionnaire-mode clarifications plus bulk answer fallback
+- Workflow runtime now persists task-scoped artifacts and exposes them through API/UI
+- Seeded requirements workflow now has an active v2 that emits structured documents and open-question lists for HITL clarification
 
 ### In Progress
 
-- Planning the next pass on task detail UX, especially subtask drill-down and richer thread metadata
+- Project-level grouping is still missing, so artifacts and related tasks are scoped to task/workflow run rather than a higher-level project entity.
+- Richer artifact preview/download behavior and stronger structured clarification validation are the next likely UI/API refinements.
 
 ### Known Gaps
 

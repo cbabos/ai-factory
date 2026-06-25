@@ -1,4 +1,28 @@
-# Workflow + HITL Plan
+# Workflow + HITL Status
+
+## Status
+
+Implemented in the current branch/runtime:
+
+- versioned workflow definitions in SQLite
+- workflow runs with resumable step state
+- human task inbox and resume flow
+- workflow editor and graph UI
+- approval reroute handling (`approved`, `rejected`, `changes_requested`)
+- task-scoped workflow artifacts stored on disk and indexed in SQLite
+- artifact visibility in task details, workflow runs, and human task review screens
+- questionnaire-capable human-input steps
+- seeded `requirements-clarify-and-approve@2` workflow that emits:
+  - structured markdown draft/final documents
+  - machine-readable `openQuestions`
+  - questionnaire-mode clarification prompts derived from workflow context
+
+Still pending:
+
+- project-level grouping across multiple tasks/runs/artifacts
+- richer artifact previews/download UX
+- stronger structured answer validation/completeness rules
+- broader automated UI coverage around workflow editor and artifact flows
 
 ## Goal
 
@@ -79,6 +103,7 @@ Additive SQLite tables:
 - `workflows`
 - `workflow_runs`
 - `human_tasks`
+- `workflow_artifacts`
 
 Migration requirements:
 
@@ -89,25 +114,28 @@ Migration requirements:
 
 ## Engine
 
-### Phase 1
+### Implemented
 
 - Load workflow by `workflowId`
-- Create a workflow run
+- Create and persist workflow runs
 - Execute sequential `agent` steps
 - Pause on `human-input` and `human-approval`
-- Persist run state after each step
-- Return a task status of `waiting_for_human` for paused runs
-
-### Phase 2
-
 - Resume paused runs
-- Resolve `subworkflow` steps
-- Support richer bindings and conditional branching
-- Add retry policies and approval rules per step
+- Persist run state after each step
+- Handle approval reroutes and fail paths
+- Persist task-scoped artifacts from long-form agent output
+- Derive questionnaire fields from workflow context open-question payloads
+
+### Next
+
+- richer bindings and conditional branching
+- explicit output contracts per workflow step
+- stronger validation around questionnaire answers
+- richer artifact/reference insertion back into prompts
 
 ## API
 
-Phase 1 endpoints:
+Implemented endpoints:
 
 - `GET /api/workflows`
 - `GET /api/workflows/:id`
@@ -116,21 +144,26 @@ Phase 1 endpoints:
 - `GET /api/workflow-runs/:id`
 - `GET /api/human-tasks`
 - `POST /api/human-tasks/:id/respond`
+- `GET /api/artifacts`
+- `GET /api/artifacts/:id`
+- `GET /api/artifacts/:id/content`
 
 ## UI
 
-Phase 1 UI goals:
+Implemented UI:
 
-- Workflow list/detail
-- Run detail with step timeline
-- Human task inbox
-- Read-only workflow graph first
+- workflow list/detail editor
+- graph-based step editing
+- run detail with step timeline
+- human task inbox
+- structured prompt/context reader
+- artifact visibility across review surfaces
 
 Later:
 
-- visual workflow editor
-- nested workflow picker
-- drag/drop step authoring
+- richer artifact previews and downloads
+- project-aware artifact/task grouping
+- deeper editor ergonomics and validation
 
 ## Routing
 

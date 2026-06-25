@@ -20,6 +20,7 @@ export class TaskFactory implements ITaskFactory {
       priority: this.derivePriority(signal),
       createdAt: Date.now(),
       constraints,
+      workflow: this.deriveWorkflow(signal),
     };
   }
 
@@ -29,5 +30,18 @@ export class TaskFactory implements ITaskFactory {
     if (meta.priority === "high") return "high";
     if (meta.priority === "batch") return "batch";
     return "normal";
+  }
+
+  private deriveWorkflow(signal: Signal): Task["workflow"] {
+    const workflowId = signal.metadata.workflowId;
+    if (typeof workflowId !== "string" || workflowId.length === 0) {
+      return undefined;
+    }
+
+    const workflowVersion = signal.metadata.workflowVersion;
+    return {
+      workflowId,
+      workflowVersion: typeof workflowVersion === "number" ? workflowVersion : undefined,
+    };
   }
 }

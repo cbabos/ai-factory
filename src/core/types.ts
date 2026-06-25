@@ -28,6 +28,13 @@ export type CapabilityTag = string;
 // ─── Priority ────────────────────────────────────────────────
 
 export type Priority = "critical" | "high" | "normal" | "batch";
+export type TaskExecutionStatus =
+  | "pending"
+  | "running"
+  | "waiting_for_human"
+  | "completed"
+  | "failed"
+  | "cancelled";
 
 // ─── Signal Layer ────────────────────────────────────────────
 
@@ -54,6 +61,11 @@ export interface TaskOrigin {
   rawPayload: unknown;
 }
 
+export interface WorkflowReference {
+  workflowId: string;
+  workflowVersion?: number;
+}
+
 export interface Task {
   id: string;
   description: string;
@@ -62,6 +74,7 @@ export interface Task {
   priority: Priority;
   createdAt: number;
   constraints?: TaskConstraints;
+  workflow?: WorkflowReference;
 }
 
 export interface TaskConstraints {

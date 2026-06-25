@@ -75,9 +75,9 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     ref
   ) => {
     const inputSizeClasses = {
-      sm: 'px-3 py-2 text-sm',
-      md: 'px-4 py-3 text-sm',
-      lg: 'px-5 py-4 text-base',
+      sm: 'px-2.5 py-1.5 text-xs',
+      md: 'px-3 py-2 text-xs',
+      lg: 'px-4 py-2.5 text-sm',
     };
 
     const variantClasses = {
@@ -94,16 +94,16 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     const activeClasses = isActive ? 'border-accent-primary shadow-[0_0_6px_rgba(0,243,255,0.5)]' : '';
 
     return (
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         {label && (
-          <label className="text-xs font-medium text-text-primary tracking-wider uppercase">
+          <label className="text-[10px] font-medium text-text-primary tracking-[0.14em] uppercase">
             {label}
           </label>
         )}
         
         <div className={`relative flex items-center group ${glitchEffect ? 'animate-[glitch-text_3s_infinite]' : ''}`}>
           {startIcon && (
-            <div className="absolute left-3 text-accent-primary/70 group-focus-within:text-accent-primary transition-colors">
+            <div className="absolute left-2.5 text-accent-primary/70 group-focus-within:text-accent-primary transition-colors">
               {startIcon}
             </div>
           )}
@@ -113,7 +113,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             className={`
               flex w-full items-center
               bg-panel text-primary
-              border rounded-cyber
+              border rounded-[6px]
               ${inputSizeClasses[size]}
               ${variantClasses[variant]}
               ${errorClasses} ${activeClasses}
@@ -129,14 +129,14 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           />
           
           {endIcon && (
-            <div className="absolute right-3 text-accent-primary/70 group-focus-within:text-accent-primary transition-colors">
+            <div className="absolute right-2.5 text-accent-primary/70 group-focus-within:text-accent-primary transition-colors">
               {endIcon}
             </div>
           )}
           
           {/* Cyberpunk border glow effect */}
           {cyberBorder && (
-            <div className="absolute inset-0 rounded-cyber border border-accent-primary/30 pointer-events-none animate-[border-pulse_2s_infinite]" />
+            <div className="absolute inset-0 rounded-[6px] border border-accent-primary/30 pointer-events-none animate-[border-pulse_2s_infinite]" />
           )}
         </div>
         

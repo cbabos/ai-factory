@@ -1,19 +1,51 @@
 import type { Request, Response, NextFunction } from "express";
 import type { ITaskRepository, TaskRecord } from "../task-repository.js";
+import type {
+  IWorkflowArtifactRepository,
+  IWorkflowRunRepository,
+} from "../workflow-repository.js";
 import type { Priority, Task } from "../types.js";
 import { ApiError } from "../api-types.js";
 
 // ─── Helper Functions ──────────────────────────────────────────────────────
 
-type TaskStatus = "pending" | "running" | "completed" | "failed";
+type TaskStatus = "pending" | "running" | "waiting_for_human" | "completed" | "failed" | "cancelled";
 
-function _taskRecordToDTO(record: TaskRecord): Record<string, unknown> {
+async function _taskRecordToDTO(
+  record: TaskRecord,
+  workflowRunRepository?: IWorkflowRunRepository,
+  artifactRepository?: IWorkflowArtifactRepository,
+): Promise<Record<string, unknown>> {
+  const workflowRun = workflowRunRepository
+    ? await workflowRunRepository.getByTaskId(record.id)
+    : undefined;
+  const artifacts = artifactRepository
+    ? await artifactRepository.getByTaskId(record.id)
+    : [];
   return {
     id: record.id,
     task: record.task,
     result: record.result,
     status: record.status,
     conversation: record.conversation,
+    workflowRunId: workflowRun?.id,
+    workflowRunStatus: workflowRun?.status,
+    artifacts: artifacts.map((artifact) => ({
+      id: artifact.id,
+      taskId: artifact.taskId,
+      workflowRunId: artifact.workflowRunId,
+      stepId: artifact.stepId,
+      title: artifact.title,
+      kind: artifact.kind,
+      mimeType: artifact.mimeType,
+      fileName: artifact.fileName,
+      storagePath: artifact.storagePath,
+      sizeBytes: artifact.sizeBytes,
+      contentUrl: `/api/artifacts/${artifact.id}/content`,
+      createdAt: artifact.createdAt,
+      updatedAt: artifact.updatedAt,
+      metadata: artifact.metadata,
+    })),
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
@@ -28,10 +60,12 @@ export async function listTasks(
 ): Promise<void> {
   try {
     const repository = req.app.get("taskRepository") as ITaskRepository;
+    const workflowRunRepository = req.app.get("workflowRunRepository") as IWorkflowRunRepository | undefined;
+    const artifactRepository = req.app.get("artifactRepository") as IWorkflowArtifactRepository | undefined;
     const body = req.query as Record<string, unknown>;
 
     const records = await repository.getAll();
-    let tasks = records.map(_taskRecordToDTO);
+    let tasks = await Promise.all(records.map((record) => _taskRecordToDTO(record, workflowRunRepository, artifactRepository)));
 
     const statusFilter = body.status as TaskStatus | undefined;
     if (statusFilter) {
@@ -83,6 +117,8 @@ export async function getTask(
 ): Promise<void> {
   try {
     const repository = req.app.get("taskRepository") as ITaskRepository;
+    const workflowRunRepository = req.app.get("workflowRunRepository") as IWorkflowRunRepository | undefined;
+    const artifactRepository = req.app.get("artifactRepository") as IWorkflowArtifactRepository | undefined;
     const { id } = req.params;
 
     const record = await repository.get(id as string);
@@ -91,7 +127,7 @@ export async function getTask(
       throw new ApiError("Task not found", { statusCode: 404 });
     }
 
-    res.json({ data: _taskRecordToDTO(record) });
+    res.json({ data: await _taskRecordToDTO(record, workflowRunRepository, artifactRepository) });
   } catch (error) {
     next(error);
   }
@@ -112,7 +148,42 @@ export async function getTaskConversation(
       throw new ApiError("Task not found", { statusCode: 404 });
     }
 
-    res.json({ data: record.conversation ?? [] });
+    const conversation = await repository.getConversation(id as string);
+    res.json({ data: conversation });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function createTask(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const submitter = req.app.get("taskSubmitter") as ((input: Record<string, unknown>) => Promise<Task>) | undefined;
+    if (!submitter) {
+      throw new ApiError("Task submission is not configured", { statusCode: 501 });
+    }
+
+    const body = req.body as Record<string, unknown>;
+    if (
+      typeof body.description !== "string"
+      || body.description.trim().length === 0
+    ) {
+      throw new ApiError("Task description is required", { statusCode: 400 });
+    }
+
+    const task = await submitter(body);
+    res.status(201).json({
+      data: {
+        id: task.id,
+        task,
+        status: "pending",
+        createdAt: task.createdAt,
+        updatedAt: task.createdAt,
+      },
+    });
   } catch (error) {
     next(error);
   }

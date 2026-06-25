@@ -79,9 +79,9 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
     // Size classes
     const sizeClasses = {
-      sm: 'px-3 py-2 text-xs',
-      md: 'px-4 py-3 text-sm',
-      lg: 'px-6 py-4 text-base',
+      sm: 'px-2.5 py-1.5 text-[11px]',
+      md: 'px-3 py-2 text-xs',
+      lg: 'px-4 py-2.5 text-sm',
     };
 
     // Variant classes
@@ -124,7 +124,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
     // Shape classes
     const shapeClasses = {
-      default: 'rounded-cyber',
+      default: 'rounded-[6px]',
       round: 'rounded-full',
       cyber: 'rounded-[4px]',
     };
@@ -173,7 +173,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         className={`
           inline-flex items-center justify-center gap-2
-          font-semibold tracking-wide
+          font-semibold tracking-[0.04em]
           transition-all duration-150 ease-[cubic-bezier(0.68,-0.55,0.27,1.55)]
           active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
           disabled:active:scale-100
@@ -194,13 +194,13 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         {loading && <LoadingSpinner />}
 
         {/* Start icon */}
-        {!loading && startIcon && <span className="text-lg">{startIcon}</span>}
+        {!loading && startIcon && <span className="text-sm">{startIcon}</span>}
 
         {/* Content */}
         <span className="flex-1 text-center">{children}</span>
 
         {/* End icon */}
-        {!loading && endIcon && <span className="text-lg">{endIcon}</span>}
+        {!loading && endIcon && <span className="text-sm">{endIcon}</span>}
       </button>
     );
   }

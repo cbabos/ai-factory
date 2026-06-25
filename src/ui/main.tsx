@@ -1,5 +1,5 @@
-import { BrowserRouter } from 'react-router-dom'
 import { createRoot } from 'react-dom/client'
+import { RouterProvider, createBrowserRouter } from 'react-router-dom'
 import App from './App.js'
 import './styles/globals.css'
 
@@ -9,8 +9,13 @@ if (!root) {
   throw new Error('Root element not found')
 }
 
+const router = createBrowserRouter([
+  {
+    path: '/*',
+    element: <App />,
+  },
+])
+
 createRoot(root).render(
-  <BrowserRouter>
-    <App />
-  </BrowserRouter>
+  <RouterProvider router={router} />
 )

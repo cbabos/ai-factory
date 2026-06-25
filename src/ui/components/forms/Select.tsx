@@ -134,9 +134,9 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
 
     // Size styles
     const sizeClasses = {
-      sm: 'px-3 py-2 text-sm',
-      md: 'px-4 py-3 text-sm',
-      lg: 'px-4 py-4 text-base',
+      sm: 'px-2.5 py-1.5 text-xs',
+      md: 'px-3 py-2 text-xs',
+      lg: 'px-4 py-2.5 text-sm',
     };
 
     // Variant styles
@@ -167,9 +167,9 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
     );
 
     return (
-      <div className="flex flex-col gap-1.5" ref={dropdownRef}>
+      <div className="flex flex-col gap-1" ref={dropdownRef}>
         {label && (
-          <label className="text-xs font-medium text-text-primary tracking-wider uppercase">
+          <label className="text-[10px] font-medium text-text-primary tracking-[0.14em] uppercase">
             {label}
           </label>
         )}
@@ -186,7 +186,7 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
               flex items-center gap-2 cursor-pointer
               ${variantClasses[variant]}
               ${sizeClasses[size]}
-              rounded-cyber
+              rounded-[6px]
               border
               transition-all duration-200 ease-[cubic-bezier(0.68,-0.55,0.27,1.55)]
             `}
@@ -230,7 +230,7 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
 
           {/* Cyberpunk glow effect */}
           {cyberBorder && (
-            <div className="absolute inset-0 rounded-cyber border border-accent-primary/20 pointer-events-none animate-[border-pulse_2s_infinite]" />
+            <div className="absolute inset-0 rounded-[6px] border border-accent-primary/20 pointer-events-none animate-[border-pulse_2s_infinite]" />
           )}
 
           {/* Dropdown list */}
@@ -238,9 +238,9 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
             <ul
               id="select-dropdown"
               className={`
-                absolute z-50 w-full mt-1.5 max-h-60 overflow-y-auto
+                absolute z-50 w-full mt-1 max-h-60 overflow-y-auto
                 bg-panel border border-accent-secondary/50
-                rounded-cyber shadow-[0_0_20px_rgba(0,0,0,0.8)]
+                rounded-[6px] shadow-[0_0_20px_rgba(0,0,0,0.8)]
                 animate-[slide-down_200ms_ease-out]
               `}
               role="listbox"
@@ -253,7 +253,7 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
                   aria-disabled={option.disabled}
                   onClick={() => !option.disabled && handleSelectChange(option.value)}
                   className={`
-                    flex items-center gap-3 px-4 py-3
+                    flex items-center gap-2 px-3 py-2
                     cursor-pointer transition-all duration-150
                     ${option.disabled
                       ? 'opacity-50 cursor-not-allowed'

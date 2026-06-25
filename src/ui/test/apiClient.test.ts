@@ -85,6 +85,7 @@ describe('apiClient', () => {
             description: 'Summarize incident',
             priority: 'normal',
             origin: { channel: 'slack' },
+            workflow: { workflowId: 'requirements-flow', workflowVersion: 1 },
           },
           status: 'completed',
           createdAt: 300,
@@ -112,6 +113,8 @@ describe('apiClient', () => {
     ]);
     expect(result.output).toBe('done');
     expect(result.originChannel).toBe('slack');
+    expect(result.workflowId).toBe('requirements-flow');
+    expect(result.workflowVersion).toBe(1);
   });
 
   it('sends nested token profiles unchanged for agent updates', async () => {
@@ -171,5 +174,116 @@ describe('apiClient', () => {
         }),
       }),
     );
+  });
+
+  it('lists workflows from the workflow API', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        data: [
+          {
+            id: 'requirements-flow',
+            name: 'Requirements Flow',
+            version: 2,
+            status: 'active',
+            steps: [],
+            createdAt: 1,
+            updatedAt: 2,
+          },
+        ],
+        total: 1,
+      }),
+    } as Response);
+
+    const result = await apiClient.listWorkflows();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3001/api/workflows',
+      undefined,
+    );
+    expect(result[0]?.id).toBe('requirements-flow');
+    expect(result[0]?.status).toBe('active');
+  });
+
+  it('creates workflow-backed tasks through the task API', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 201,
+      statusText: 'Created',
+      json: async () => ({
+        data: {
+          id: 'task-workflow-1',
+          task: {
+            description: 'Launch deterministic workflow',
+            priority: 'high',
+            origin: { channel: 'api' },
+            workflow: { workflowId: 'implement-test-review', workflowVersion: 1 },
+          },
+          status: 'pending',
+          createdAt: 100,
+          updatedAt: 100,
+        },
+      }),
+    } as Response);
+
+    const result = await apiClient.createTask({
+      description: 'Launch deterministic workflow',
+      priority: 'high',
+      context: { repo: 'ai-factory' },
+      workflowId: 'implement-test-review',
+      workflowVersion: 1,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3001/api/tasks',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description: 'Launch deterministic workflow',
+          priority: 'high',
+          context: { repo: 'ai-factory' },
+          workflowId: 'implement-test-review',
+          workflowVersion: 1,
+        }),
+      }),
+    );
+    expect(result.workflowId).toBe('implement-test-review');
+    expect(result.workflowVersion).toBe(1);
+  });
+
+  it('posts human task responses to the HITL endpoint', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        data: {
+          output: {
+            workflowRunId: 'run-1',
+            waitingForHuman: false,
+          },
+        },
+      }),
+    } as Response);
+
+    const result = await apiClient.respondToHumanTask('human-1', 'approved');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3001/api/human-tasks/human-1/respond',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ response: 'approved' }),
+      }),
+    );
+    expect(result).toEqual({
+      output: {
+        workflowRunId: 'run-1',
+        waitingForHuman: false,
+      },
+    });
   });
 });

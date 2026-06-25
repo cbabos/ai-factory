@@ -15,6 +15,9 @@ export const API_ENDPOINTS = {
   agents: `${API_BASE_URL}/api/agents`,
   models: `${API_BASE_URL}/api/models`,
   tasks: `${API_BASE_URL}/api/tasks`,
+  workflows: `${API_BASE_URL}/api/workflows`,
+  workflowRuns: `${API_BASE_URL}/api/workflow-runs`,
+  humanTasks: `${API_BASE_URL}/api/human-tasks`,
   settings: `${API_BASE_URL}/api/settings`,
   settingsTheme: `${API_BASE_URL}/api/settings/theme`,
 } as const;

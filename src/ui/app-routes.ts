@@ -3,7 +3,11 @@ export const appRoutes = {
   agents: '/agents',
   models: '/models',
   tasks: '/tasks',
+  createTask: '/tasks/new',
   taskDetails: '/tasks/:taskId',
+  workflows: '/workflows',
+  workflowRunDetails: '/workflow-runs/:runId',
+  humanTasks: '/human-tasks',
 } as const;
 
 export const appRouteMessages = {

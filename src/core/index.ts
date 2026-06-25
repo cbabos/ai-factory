@@ -1,4 +1,5 @@
 export * from "./types.js";
+export * from "./workflow-types.js";
 export * from "./interfaces.js";
 export * from "./configurable.js";
 export * from "./event-bus.js";
@@ -30,6 +31,10 @@ export * from "./health-checker.js";
 export * from "./sqlite-repository.js";
 export * from "./task-repository.js";
 export * from "./sqlite-task-repository.js";
+export * from "./workflow-repository.js";
+export * from "./sqlite-workflow-repository.js";
+export * from "./workflow-engine.js";
+export * from "./starter-workflows.js";
 export * from "./sqlite-config-store.js";
 export * from "./agent-store.js";
 export * from "./model-store.js";

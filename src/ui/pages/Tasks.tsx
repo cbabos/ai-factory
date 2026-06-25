@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { appRoutes } from '../app-routes.js';
 import { Button } from '../components/controls/Button.js';
 import { ConversationTurnView } from '../components/conversation/ConversationTurnView.js';
 import { Input } from '../components/forms/Input.js';
@@ -20,8 +21,10 @@ const statusOptions = [
   { value: 'all', label: 'All statuses' },
   { value: 'pending', label: 'Pending' },
   { value: 'running', label: 'Running' },
+  { value: 'waiting_for_human', label: 'Waiting for human' },
   { value: 'completed', label: 'Completed' },
   { value: 'failed', label: 'Failed' },
+  { value: 'cancelled', label: 'Cancelled' },
 ];
 
 const priorityOptions = [
@@ -35,8 +38,10 @@ const priorityOptions = [
 const statusBadgeClasses: Record<TaskListItem['status'], string> = {
   pending: 'border-accent-warning/20 bg-accent-warning/10 text-accent-warning',
   running: 'border-accent-primary/20 bg-accent-primary/10 text-accent-primary',
+  waiting_for_human: 'border-accent-secondary/20 bg-accent-secondary/10 text-accent-secondary',
   completed: 'border-accent-success/20 bg-accent-success/10 text-accent-success',
   failed: 'border-accent-danger/20 bg-accent-danger/10 text-accent-danger',
+  cancelled: 'border-text-muted/20 bg-text-muted/10 text-text-muted',
 };
 
 const priorityBadgeClasses: Record<TaskListItem['priority'], string> = {
@@ -362,7 +367,7 @@ export default function Tasks() {
         ...counts,
         [task.status]: counts[task.status] + 1,
       }),
-      { pending: 0, running: 0, completed: 0, failed: 0 },
+      { pending: 0, running: 0, waiting_for_human: 0, completed: 0, failed: 0, cancelled: 0 },
     );
   }, [tasks]);
 
@@ -505,6 +510,11 @@ export default function Tasks() {
                           <div className="mt-2 text-xs text-text-secondary">
                             {task.originChannel ?? 'unknown origin'} · created {formatDate(task.createdAt)}
                           </div>
+                          {task.workflowId ? (
+                            <div className="mt-2 text-xs text-accent-secondary">
+                              workflow {task.workflowId} v{task.workflowVersion ?? 'latest'}
+                            </div>
+                          ) : null}
                         </button>
 
                         <span className={`w-fit rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${statusBadgeClasses[task.status]}`}>
@@ -542,6 +552,16 @@ export default function Tasks() {
                           >
                             Open
                           </Button>
+                          {task.workflowRunId ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => navigate(appRoutes.workflowRunDetails.replace(':runId', task.workflowRunId!))}
+                              className="px-2"
+                            >
+                              Run
+                            </Button>
+                          ) : null}
                         </div>
                       </div>
 
@@ -576,6 +596,11 @@ export default function Tasks() {
                           <span className="rounded-full border border-accent-secondary/20 bg-accent-secondary/10 px-2 py-0.5 text-[10px] text-accent-secondary">
                             {getTaskAge(task)}
                           </span>
+                          {task.workflowRunId ? (
+                            <span className="rounded-full border border-accent-secondary/20 bg-accent-secondary/10 px-2 py-0.5 text-[10px] text-accent-secondary">
+                              workflow run
+                            </span>
+                          ) : null}
                         </div>
                         <div className="flex gap-2">
                           <Button
@@ -594,6 +619,16 @@ export default function Tasks() {
                           >
                             Open
                           </Button>
+                          {task.workflowRunId ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() => navigate(appRoutes.workflowRunDetails.replace(':runId', task.workflowRunId!))}
+                            >
+                              Run
+                            </Button>
+                          ) : null}
                         </div>
                       </div>
                     </div>

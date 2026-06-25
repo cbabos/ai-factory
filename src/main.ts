@@ -5,8 +5,15 @@ import { loadConfig } from "./core/config-loader.js";
 import { EnvSecretsProvider } from "./core/secrets.js";
 import { ConsoleLogger } from "./core/logger.js";
 import { SQLiteTaskRepository } from "./core/sqlite-task-repository.js";
+import {
+  SQLiteWorkflowArtifactRepository,
+  SQLiteWorkflowRepository,
+  SQLiteWorkflowRunRepository,
+  SQLiteHumanTaskRepository,
+} from "./core/sqlite-workflow-repository.js";
 import { ToolRegistry, createFileTools, RunShellCommandTool } from "./tools/index.js";
 import { SQLiteConfigStore } from "./core/sqlite-config-store.js";
+import { seedStarterWorkflows } from "./core/starter-workflows.js";
 import { AIFactory } from "./factory.js";
 import {
   EmailAdapter,
@@ -38,13 +45,22 @@ async function main() {
   }
   tools.register(new RunShellCommandTool());
   const taskRepository = new SQLiteTaskRepository("./ai-factory.db", "tasks");
+  const workflowRepository = new SQLiteWorkflowRepository("./ai-factory.db");
+  const workflowRunRepository = new SQLiteWorkflowRunRepository("./ai-factory.db");
+  const humanTaskRepository = new SQLiteHumanTaskRepository("./ai-factory.db");
+  const artifactRepository = new SQLiteWorkflowArtifactRepository("./ai-factory.db");
   const settingsStore = new SQLiteConfigStore("./ai-factory.db");
+  await seedStarterWorkflows(workflowRepository);
   
   const factory = new AIFactory({ 
     config, 
     secrets, 
     logger, 
     taskRepository, 
+    workflowRepository,
+    workflowRunRepository,
+    humanTaskRepository,
+    artifactRepository,
     tools,
     apiServerOptions: {
       port: 3001,
@@ -81,6 +97,10 @@ async function main() {
     logger.info("Shutting down AI Factory...");
     await factory.stop();
     await taskRepository.close();
+    await workflowRepository.close();
+    await workflowRunRepository.close();
+    await humanTaskRepository.close();
+    await artifactRepository.close();
     process.exit(0);
   });
 

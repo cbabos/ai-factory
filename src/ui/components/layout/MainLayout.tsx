@@ -1,5 +1,6 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
+import { apiClient } from '../../services/index.js';
 import { ThemeSwitcher } from '../../theme/index.js';
 
 interface MainLayoutProps {
@@ -8,12 +9,44 @@ interface MainLayoutProps {
 }
 
 const navigationItems = [
+  { to: '/tasks/new', label: 'New Task' },
   { to: '/agents', label: 'Agents' },
   { to: '/models', label: 'Models' },
   { to: '/tasks', label: 'Tasks' },
+  { to: '/workflows', label: 'Workflows' },
+  { to: '/human-tasks', label: 'Human Tasks' },
 ];
 
 export const MainLayout: React.FC<MainLayoutProps> = ({ children, title = 'AI Factory' }) => {
+  const [pendingHumanTaskCount, setPendingHumanTaskCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPendingCount = async () => {
+      try {
+        const tasks = await apiClient.listHumanTasks();
+        if (!cancelled) {
+          setPendingHumanTaskCount(tasks.length);
+        }
+      } catch {
+        if (!cancelled) {
+          setPendingHumanTaskCount(0);
+        }
+      }
+    };
+
+    void loadPendingCount();
+    const intervalId = window.setInterval(() => {
+      void loadPendingCount();
+    }, 5000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-panel text-text-primary transition-colors">
       <header className="sticky top-0 z-40 border-b border-accent-primary/20 bg-panel/95 backdrop-blur-sm transition-colors">
@@ -35,7 +68,14 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children, title = 'AI Fa
                     }`
                   }
                 >
-                  {item.label}
+                  <span className="inline-flex items-center gap-2">
+                    <span>{item.label}</span>
+                    {item.to === '/human-tasks' && pendingHumanTaskCount > 0 ? (
+                      <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-accent-danger px-1.5 py-0.5 text-[10px] font-bold leading-none text-white shadow-[0_0_12px_rgba(255,49,49,0.45)]">
+                        {pendingHumanTaskCount}
+                      </span>
+                    ) : null}
+                  </span>
                 </NavLink>
               ))}
             </nav>

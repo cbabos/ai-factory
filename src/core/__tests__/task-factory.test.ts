@@ -50,4 +50,10 @@ describe("TaskFactory", () => {
     const task = factory.create(signal);
     expect(task.origin.rawPayload).toEqual(raw);
   });
+
+  it("derives workflow selection from metadata", () => {
+    const factory = new TaskFactory();
+    const task = factory.create(makeSignal("x", { workflowId: "requirements-review", workflowVersion: 2 }));
+    expect(task.workflow).toEqual({ workflowId: "requirements-review", workflowVersion: 2 });
+  });
 });

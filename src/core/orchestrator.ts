@@ -39,6 +39,7 @@ export class Orchestrator
   private aggregator: IAggregator;
   private budgetTracker: IBudgetTracker;
   private decompositionThreshold: number;
+  private onConversationAppended?: (taskId: string, conversation: ConversationTurn[]) => Promise<void>;
 
   constructor(deps: {
     estimator: IComplexityEstimator;
@@ -50,6 +51,7 @@ export class Orchestrator
     eventBus: IEventBus;
     tracer: ITracer;
     decompositionThreshold: number;
+    onConversationAppended?: (taskId: string, conversation: ConversationTurn[]) => Promise<void>;
   }) {
     super();
     this.estimator = deps.estimator;
@@ -59,6 +61,7 @@ export class Orchestrator
     this.aggregator = deps.aggregator;
     this.budgetTracker = deps.budgetTracker;
     this.decompositionThreshold = deps.decompositionThreshold;
+    this.onConversationAppended = deps.onConversationAppended;
 
     const trace = deps.tracer.startTrace("orchestrator-init");
     const ctx: PipelineContext = {
@@ -81,7 +84,11 @@ export class Orchestrator
     try {
       const estimation = await this.estimateComplexity(task);
       conversation.push(...estimation.conversation);
-      const subTasks = await this.decomposeIfNeeded(task, estimation.score);
+      await this.appendConversation(task.id, estimation.conversation);
+      const decomposition = await this.decomposeIfNeeded(task, estimation.score);
+      conversation.push(...decomposition.conversation);
+      await this.appendConversation(task.id, decomposition.conversation);
+      const subTasks = decomposition.subTasks;
       const assignedSubTasks = await this.assignModels(subTasks);
       const results = await this.dispatch(assignedSubTasks);
       const final = this.aggregate(task, results);
@@ -102,6 +109,7 @@ export class Orchestrator
       const errorConversation = getErrorConversation(err);
       if (errorConversation) {
         conversation.push(...errorConversation);
+        await this.appendConversation(task.id, errorConversation);
       }
 
       this.emit("task:failed", {
@@ -136,20 +144,23 @@ export class Orchestrator
   private async decomposeIfNeeded(
     task: Task,
     score: ComplexityScore,
-  ): Promise<SubTask[]> {
+  ): Promise<import("./interfaces.js").DecompositionResult> {
     if (score.score <= this.decompositionThreshold) {
-      return [
-        {
-          id: `${task.id}-direct`,
-          parentTaskId: task.id,
-          description: task.description,
-          context: task.context,
-          dependencies: [],
-          capabilityTags: task.constraints?.requiredCapabilities ?? [],
-          complexity: score,
-          priority: task.priority,
-        },
-      ];
+      return {
+        subTasks: [
+          {
+            id: `${task.id}-direct`,
+            parentTaskId: task.id,
+            description: task.description,
+            context: task.context,
+            dependencies: [],
+            capabilityTags: task.constraints?.requiredCapabilities ?? [],
+            complexity: score,
+            priority: task.priority,
+          },
+        ],
+        conversation: [],
+      };
     }
 
     const span = this.startSpan("decompose");
@@ -159,7 +170,7 @@ export class Orchestrator
       subTaskCount: result.subTasks.length,
     });
     this.endSpan(span!, { subTaskCount: result.subTasks.length });
-    return result.subTasks;
+    return result;
   }
 
   private async assignModels(subTasks: SubTask[]): Promise<SubTask[]> {
@@ -198,5 +209,12 @@ export class Orchestrator
     const final = this.aggregator.aggregate(task, results);
     this.endSpan(span!);
     return final;
+  }
+
+  private async appendConversation(taskId: string, conversation: ConversationTurn[]): Promise<void> {
+    if (!this.onConversationAppended || conversation.length === 0) {
+      return;
+    }
+    await this.onConversationAppended(taskId, conversation);
   }
 }

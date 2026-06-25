@@ -7,11 +7,16 @@ import type {
   ModelRecord,
   PaginatedTasks,
   TaskDetails,
+  TaskCreateInput,
   TaskListItem,
   TaskQuery,
   TaskRecord,
   ThemeSettings,
   UiTaskStatus,
+  WorkflowDefinitionRecord,
+  WorkflowMutationInput,
+  WorkflowRunRecord,
+  HumanTaskRecord,
 } from './types.js';
 
 interface ApiEnvelope<T> {
@@ -28,6 +33,38 @@ interface TaskListEnvelope {
   total: number;
   page: number;
   pageSize: number;
+}
+
+interface HumanTaskListEnvelope {
+  data: HumanTaskRecord[];
+  total: number;
+}
+
+interface WorkflowRunListEnvelope {
+  data: WorkflowRunRecord[];
+  total: number;
+}
+
+function extractWorkflowRunId(output: unknown): string | undefined {
+  if (typeof output !== 'object' || output === null) {
+    return undefined;
+  }
+
+  if ('workflowRunId' in output && typeof output.workflowRunId === 'string') {
+    return output.workflowRunId;
+  }
+
+  if (
+    'output' in output
+    && typeof output.output === 'object'
+    && output.output !== null
+    && 'workflowRunId' in output.output
+    && typeof output.output.workflowRunId === 'string'
+  ) {
+    return output.output.workflowRunId;
+  }
+
+  return undefined;
 }
 
 const defaultHeaders = {
@@ -56,6 +93,10 @@ function mapTaskRecordToListItem(record: TaskRecord): TaskListItem {
     originChannel: record.task.origin?.channel,
     cost: record.result?.totalCost,
     tokens: record.result?.totalTokens.total,
+    workflowId: record.task.workflow?.workflowId,
+    workflowVersion: record.task.workflow?.workflowVersion,
+    workflowRunId: record.workflowRunId ?? extractWorkflowRunId(record.result?.output),
+    workflowRunStatus: record.workflowRunStatus,
   };
 }
 
@@ -64,6 +105,7 @@ function mapTaskRecordToDetails(record: TaskRecord): TaskDetails {
     ...mapTaskRecordToListItem(record),
     output: record.result?.output,
     conversation: record.conversation ?? record.result?.conversation ?? [],
+    artifacts: record.artifacts ?? [],
   };
 }
 
@@ -153,6 +195,74 @@ export const apiClient = {
     return mapTaskRecordToDetails(response.data);
   },
 
+  async createTask(task: TaskCreateInput): Promise<TaskDetails> {
+    const response = await requestJson<ApiEnvelope<TaskRecord>>(API_ENDPOINTS.tasks, {
+      method: 'POST',
+      headers: defaultHeaders,
+      body: JSON.stringify(task),
+    });
+    return mapTaskRecordToDetails(response.data);
+  },
+
+  async listWorkflows(): Promise<WorkflowDefinitionRecord[]> {
+    const response = await requestJson<ApiListEnvelope<WorkflowDefinitionRecord>>(API_ENDPOINTS.workflows);
+    return response.data;
+  },
+
+  async getWorkflow(id: string, version?: number): Promise<WorkflowDefinitionRecord> {
+    const suffix = version !== undefined ? `?version=${version}` : '';
+    const response = await requestJson<ApiEnvelope<WorkflowDefinitionRecord>>(`${API_ENDPOINTS.workflows}/${id}${suffix}`);
+    return response.data;
+  },
+
+  async createWorkflow(workflow: WorkflowMutationInput): Promise<WorkflowDefinitionRecord> {
+    const response = await requestJson<ApiEnvelope<WorkflowDefinitionRecord>>(API_ENDPOINTS.workflows, {
+      method: 'POST',
+      headers: defaultHeaders,
+      body: JSON.stringify(workflow),
+    });
+    return response.data;
+  },
+
+  async updateWorkflow(id: string, workflow: Partial<WorkflowMutationInput>): Promise<WorkflowDefinitionRecord> {
+    const response = await requestJson<ApiEnvelope<WorkflowDefinitionRecord>>(`${API_ENDPOINTS.workflows}/${id}`, {
+      method: 'PUT',
+      headers: defaultHeaders,
+      body: JSON.stringify(workflow),
+    });
+    return response.data;
+  },
+
+  async getWorkflowRun(id: string): Promise<WorkflowRunRecord> {
+    const response = await requestJson<ApiEnvelope<WorkflowRunRecord>>(`${API_ENDPOINTS.workflowRuns}/${id}`);
+    return response.data;
+  },
+
+  async listWorkflowRuns(query: { workflowId?: string; status?: string; taskId?: string } = {}): Promise<WorkflowRunRecord[]> {
+    const params = new URLSearchParams();
+    if (query.workflowId) params.set('workflowId', query.workflowId);
+    if (query.status) params.set('status', query.status);
+    if (query.taskId) params.set('taskId', query.taskId);
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    const response = await requestJson<WorkflowRunListEnvelope>(`${API_ENDPOINTS.workflowRuns}${suffix}`);
+    return response.data;
+  },
+
+  async listHumanTasks(workflowRunId?: string): Promise<HumanTaskRecord[]> {
+    const suffix = workflowRunId ? `?workflowRunId=${encodeURIComponent(workflowRunId)}` : '';
+    const response = await requestJson<HumanTaskListEnvelope>(`${API_ENDPOINTS.humanTasks}${suffix}`);
+    return response.data;
+  },
+
+  async respondToHumanTask(id: string, responseValue: unknown): Promise<unknown> {
+    const response = await requestJson<ApiEnvelope<unknown>>(`${API_ENDPOINTS.humanTasks}/${id}/respond`, {
+      method: 'POST',
+      headers: defaultHeaders,
+      body: JSON.stringify({ response: responseValue }),
+    });
+    return response.data;
+  },
+
   async getThemeSettings(): Promise<ThemeSettings> {
     const response = await requestJson<ApiEnvelope<ThemeSettings>>(API_ENDPOINTS.settingsTheme);
     return response.data;
@@ -169,7 +279,7 @@ export const apiClient = {
 };
 
 export function isTaskStatus(value: string): value is UiTaskStatus {
-  return ['pending', 'running', 'completed', 'failed'].includes(value);
+  return ['pending', 'running', 'waiting_for_human', 'completed', 'failed', 'cancelled'].includes(value);
 }
 
 export function isTaskPriority(value: string): value is Priority {

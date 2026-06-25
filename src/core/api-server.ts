@@ -7,6 +7,12 @@ import { join } from "node:path";
 import type { IAgentStore } from "./agent-store.js";
 import type { IModelStore } from "./model-store.js";
 import type { ITaskRepository } from "./task-repository.js";
+import type {
+  IWorkflowArtifactRepository,
+  IHumanTaskRepository,
+  IWorkflowRepository,
+  IWorkflowRunRepository,
+} from "./workflow-repository.js";
 import type { SSEEvent, ApiServerOptions } from "./api-types.js";
 import { ApiError, isApiError } from "./api-types.js";
 import type { FactoryEvent } from "./types.js";
@@ -30,13 +36,28 @@ import {
 } from "./api-handlers/settings.js";
 import {
   listTasks,
+  createTask,
   getTask,
   getTaskConversation,
 } from "./api-handlers/tasks.js";
+import {
+  listWorkflows,
+  getWorkflow,
+  createWorkflow,
+  updateWorkflow,
+  listWorkflowRuns,
+  getWorkflowRun,
+  listHumanTasks,
+  respondToHumanTask,
+  listArtifacts,
+  getArtifact,
+  getArtifactContent,
+} from "./api-handlers/workflows.js";
 import type { AgentRegistry } from "./agent-registry.js";
 import type { ModelCatalog } from "./model-catalog.js";
 import type { Tracer } from "./tracer.js";
 import type { BudgetTracker } from "./budget-tracker.js";
+import type { FinalResult, Task } from "./types.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  API Server Class
@@ -54,10 +75,16 @@ export class ApiServer {
   private agentStore?: IAgentStore;
   private modelStore?: IModelStore;
   private taskRepository?: ITaskRepository;
+  private workflowRepository?: IWorkflowRepository;
+  private workflowRunRepository?: IWorkflowRunRepository;
+  private humanTaskRepository?: IHumanTaskRepository;
+  private artifactRepository?: IWorkflowArtifactRepository;
   private agentRegistry?: AgentRegistry;
   private modelCatalog?: ModelCatalog;
   private tracer?: Tracer;
   private budgetTracker?: BudgetTracker;
+  private humanTaskResponder?: (humanTaskId: string, response: unknown) => Promise<FinalResult>;
+  private taskSubmitter?: (input: Record<string, unknown>) => Promise<Task>;
 
   private sseClients = new Map<string, { res: Response; interval: NodeJS.Timeout }>();
   private sseInterval?: NodeJS.Timeout;
@@ -114,6 +141,7 @@ export class ApiServer {
     this.setupModelRoutes(router);
     this.setupSettingsRoutes(router);
     this.setupTaskRoutes(router);
+    this.setupWorkflowRoutes(router);
     this.setupSSE(router);
 
     this.app.use("/api", router);
@@ -142,8 +170,23 @@ export class ApiServer {
 
   private setupTaskRoutes(router: Router): void {
     router.get("/tasks", this.wrapAsync(listTasks));
+    router.post("/tasks", this.wrapAsync(createTask));
     router.get("/tasks/:id", this.wrapAsync(getTask));
     router.get("/tasks/:id/conversation", this.wrapAsync(getTaskConversation));
+  }
+
+  private setupWorkflowRoutes(router: Router): void {
+    router.get("/workflows", this.wrapAsync(listWorkflows));
+    router.get("/workflows/:id", this.wrapAsync(getWorkflow));
+    router.post("/workflows", this.wrapAsync(createWorkflow));
+    router.put("/workflows/:id", this.wrapAsync(updateWorkflow));
+    router.get("/workflow-runs", this.wrapAsync(listWorkflowRuns));
+    router.get("/workflow-runs/:id", this.wrapAsync(getWorkflowRun));
+    router.get("/human-tasks", this.wrapAsync(listHumanTasks));
+    router.post("/human-tasks/:id/respond", this.wrapAsync(respondToHumanTask));
+    router.get("/artifacts", this.wrapAsync(listArtifacts));
+    router.get("/artifacts/:id", this.wrapAsync(getArtifact));
+    router.get("/artifacts/:id/content", this.wrapAsync(getArtifactContent));
   }
 
   private setupSSE(router: Router): void {
@@ -225,18 +268,30 @@ export class ApiServer {
     agentStore?: IAgentStore,
     modelStore?: IModelStore,
     taskRepository?: ITaskRepository,
+    workflowRepository?: IWorkflowRepository,
+    workflowRunRepository?: IWorkflowRunRepository,
+    humanTaskRepository?: IHumanTaskRepository,
+    artifactRepository?: IWorkflowArtifactRepository,
     agentRegistry?: AgentRegistry,
     modelCatalog?: ModelCatalog,
     tracer?: Tracer,
     budgetTracker?: BudgetTracker,
+    humanTaskResponder?: (humanTaskId: string, response: unknown) => Promise<FinalResult>,
+    taskSubmitter?: (input: Record<string, unknown>) => Promise<Task>,
   ): Promise<void> {
     this.agentStore = agentStore;
     this.modelStore = modelStore;
     this.taskRepository = taskRepository;
+    this.workflowRepository = workflowRepository;
+    this.workflowRunRepository = workflowRunRepository;
+    this.humanTaskRepository = humanTaskRepository;
+    this.artifactRepository = artifactRepository;
     this.agentRegistry = agentRegistry;
     this.modelCatalog = modelCatalog;
     this.tracer = tracer;
     this.budgetTracker = budgetTracker;
+    this.humanTaskResponder = humanTaskResponder;
+    this.taskSubmitter = taskSubmitter;
 
     if (this.agentStore) {
       this.app.set("agentStore", this.agentStore);
@@ -246,6 +301,24 @@ export class ApiServer {
     }
     if (this.taskRepository) {
       this.app.set("taskRepository", this.taskRepository);
+    }
+    if (this.workflowRepository) {
+      this.app.set("workflowRepository", this.workflowRepository);
+    }
+    if (this.workflowRunRepository) {
+      this.app.set("workflowRunRepository", this.workflowRunRepository);
+    }
+    if (this.humanTaskRepository) {
+      this.app.set("humanTaskRepository", this.humanTaskRepository);
+    }
+    if (this.artifactRepository) {
+      this.app.set("artifactRepository", this.artifactRepository);
+    }
+    if (this.humanTaskResponder) {
+      this.app.set("humanTaskResponder", this.humanTaskResponder);
+    }
+    if (this.taskSubmitter) {
+      this.app.set("taskSubmitter", this.taskSubmitter);
     }
 
     if (this.enableSse && this.agentRegistry) {
@@ -334,6 +407,15 @@ export class ApiServer {
     if (this.taskRepository?.close) {
       await this.taskRepository.close();
     }
+    if (this.workflowRepository && "close" in this.workflowRepository && typeof this.workflowRepository.close === "function") {
+      await this.workflowRepository.close();
+    }
+    if (this.workflowRunRepository && "close" in this.workflowRunRepository && typeof this.workflowRunRepository.close === "function") {
+      await this.workflowRunRepository.close();
+    }
+    if (this.humanTaskRepository && "close" in this.humanTaskRepository && typeof this.humanTaskRepository.close === "function") {
+      await this.humanTaskRepository.close();
+    }
   }
 
   public getServer(): Server | HTTPSServer | undefined {
@@ -344,4 +426,3 @@ export class ApiServer {
     return this.app;
   }
 }
-

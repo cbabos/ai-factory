@@ -1,5 +1,14 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { AgentsPage, ModelsPage, TaskDetailsPage, TasksPage } from './pages/index.js';
+import {
+  AgentsPage,
+  CreateTaskPage,
+  HumanTasksPage,
+  ModelsPage,
+  TaskDetailsPage,
+  TasksPage,
+  WorkflowRunDetailsPage,
+  WorkflowsPage,
+} from './pages/index.js';
 import { MainLayout } from './components/layout/MainLayout.js';
 import { ThemeProvider } from './theme/index.js';
 import { Panel } from './components/layout/Panel.js';
@@ -14,7 +23,11 @@ const App = () => {
           <Route path={appRoutes.agents} element={<AgentsPage />} />
           <Route path={appRoutes.models} element={<ModelsPage />} />
           <Route path={appRoutes.tasks} element={<TasksPage />} />
+          <Route path={appRoutes.createTask} element={<CreateTaskPage />} />
           <Route path={appRoutes.taskDetails} element={<TaskDetailsPage />} />
+          <Route path={appRoutes.workflows} element={<WorkflowsPage />} />
+          <Route path={appRoutes.workflowRunDetails} element={<WorkflowRunDetailsPage />} />
+          <Route path={appRoutes.humanTasks} element={<HumanTasksPage />} />
           <Route
             path="*"
             element={

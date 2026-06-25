@@ -114,9 +114,9 @@ const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
     const isOverLimit = maxLength && remainingLength! < 0;
 
     return (
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         {label && (
-          <label className="text-xs font-medium text-text-primary tracking-wider uppercase">
+          <label className="text-[10px] font-medium text-text-primary tracking-[0.14em] uppercase">
             {label}
           </label>
         )}
@@ -140,8 +140,8 @@ const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
             className={`
               flex w-full min-h-[6rem] items-start
               bg-panel text-primary
-              border border-accent-primary/50 rounded-glitch
-              p-4 text-sm
+              border border-accent-primary/50 rounded-[6px]
+              p-3 text-xs
               focus:outline-none focus:border-accent-secondary
               focus:shadow-[0_0_8px_rgba(0,243,255,0.4)]
               resize-none
@@ -158,7 +158,7 @@ const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
           />
 
           {cyberBorder && (
-            <div className="absolute inset-0 rounded-glitch border border-accent-primary/20 pointer-events-none" />
+            <div className="absolute inset-0 rounded-[6px] border border-accent-primary/20 pointer-events-none" />
           )}
         </div>
 

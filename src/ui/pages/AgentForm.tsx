@@ -1,14 +1,12 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '../components/controls/Button.js';
 import { Input } from '../components/forms/Input.js';
 import { TextArea } from '../components/forms/TextArea.js';
 import { Select } from '../components/forms/Select.js';
-import { MultiSelect } from '../components/forms/MultiSelect.js';
-import type { AgentMutationInput, AgentRecord, ModelRecord } from '../services/index.js';
+import type { AgentMutationInput, AgentRecord } from '../services/index.js';
 
 interface AgentFormProps {
   agent: AgentRecord | null;
-  availableModels: ModelRecord[];
   onSubmit: (agent: Partial<AgentMutationInput>) => void;
   onCancel: () => void;
 }
@@ -18,10 +16,6 @@ interface AgentFormState {
   description: string;
   tagsText: string;
   complexityBand: 'focused' | 'balanced' | 'demanding' | 'any';
-  tokenMin: number;
-  tokenTypical: number;
-  tokenMax: number;
-  preferredModels: string[];
   timeoutMinutes: number;
   iterationCount: number;
   isActive: boolean;
@@ -40,6 +34,11 @@ const complexityOptions = [
 ];
 
 const metadataTextKeys = ['systemPrompt', 'outputContract', 'toolPolicy', 'notes'] as const;
+const DEFAULT_AGENT_TOKEN_PROFILE = {
+  min: 100,
+  typical: 750,
+  max: 1500,
+} as const;
 
 function stringifyMetadataValue(value: unknown): string {
   return typeof value === 'string' ? value : '';
@@ -81,10 +80,6 @@ function createFormState(agent: AgentRecord | null): AgentFormState {
     description: agent?.description ?? '',
     tagsText: agent?.tags.join(', ') ?? '',
     complexityBand: deriveComplexityBand(agent),
-    tokenMin: agent?.tokenProfile.min ?? 100,
-    tokenTypical: agent?.tokenProfile.typical ?? 750,
-    tokenMax: agent?.tokenProfile.max ?? 1500,
-    preferredModels: agent?.preferredModels ?? [],
     timeoutMinutes: agent ? Number((agent.timeoutMs / 60000).toFixed(2)) : 1,
     iterationCount: agent?.maxRetries ?? 5,
     isActive: agent?.isActive ?? true,
@@ -127,7 +122,6 @@ function withOptionalText(
 
 const AgentForm: React.FC<AgentFormProps> = ({
   agent,
-  availableModels,
   onSubmit,
   onCancel,
 }) => {
@@ -138,24 +132,6 @@ const AgentForm: React.FC<AgentFormProps> = ({
     setFormData(createFormState(agent));
     setError(null);
   }, [agent]);
-
-  const modelOptions = useMemo(() => {
-    const options = new Map<string, { value: string; label: string }>();
-    for (const model of availableModels) {
-      options.set(model.modelId, {
-        value: model.modelId,
-        label: `${model.provider.toUpperCase()} / ${model.modelId}`,
-      });
-    }
-    for (const modelId of formData.preferredModels) {
-      if (!options.has(modelId)) {
-        options.set(modelId, { value: modelId, label: modelId });
-      }
-    }
-    return Array.from(options.values()).sort((left, right) =>
-      left.label.localeCompare(right.label),
-    );
-  }, [availableModels, formData.preferredModels]);
 
   const updateField = <Key extends keyof AgentFormState>(
     key: Key,
@@ -171,17 +147,6 @@ const AgentForm: React.FC<AgentFormProps> = ({
     const name = formData.name.trim();
     if (!name) {
       setError('Agent name is required');
-      return;
-    }
-
-    if (
-      formData.tokenMin <= 0 ||
-      formData.tokenTypical <= 0 ||
-      formData.tokenMax <= 0 ||
-      formData.tokenMin > formData.tokenTypical ||
-      formData.tokenTypical > formData.tokenMax
-    ) {
-      setError('Token profile must be ordered as min <= typical <= max');
       return;
     }
 
@@ -216,12 +181,7 @@ const AgentForm: React.FC<AgentFormProps> = ({
       description: formData.description.trim(),
       tags: parseTags(formData.tagsText),
       ...complexity,
-      tokenProfile: {
-        min: formData.tokenMin,
-        typical: formData.tokenTypical,
-        max: formData.tokenMax,
-      },
-      preferredModels: formData.preferredModels,
+      tokenProfile: DEFAULT_AGENT_TOKEN_PROFILE,
       timeoutMs: Math.round(formData.timeoutMinutes * 60000),
       maxRetries: formData.iterationCount,
       isActive: formData.isActive,
@@ -295,7 +255,7 @@ const AgentForm: React.FC<AgentFormProps> = ({
             />
           </section>
 
-          <section className="grid gap-4 lg:grid-cols-2">
+          <section className="space-y-4">
             <TextArea
               label="System Prompt"
               value={formData.systemPrompt}
@@ -306,28 +266,6 @@ const AgentForm: React.FC<AgentFormProps> = ({
               cyberBorder
               placeholder="Role, boundaries, and operating instructions for this agent."
             />
-            <div className="space-y-4">
-              <TextArea
-                label="Output Contract"
-                value={formData.outputContract}
-                onChange={(e) => updateField('outputContract', e.target.value)}
-                minRows={3}
-                maxRows={6}
-                autoGrow
-                cyberBorder
-                placeholder="Expected answer shape, schemas, or quality bar."
-              />
-              <TextArea
-                label="Tool Policy"
-                value={formData.toolPolicy}
-                onChange={(e) => updateField('toolPolicy', e.target.value)}
-                minRows={3}
-                maxRows={6}
-                autoGrow
-                cyberBorder
-                placeholder="Tool preferences, limits, or permissions."
-              />
-            </div>
           </section>
 
           <section className="grid gap-4 lg:grid-cols-[1fr_1fr]">
@@ -351,42 +289,7 @@ const AgentForm: React.FC<AgentFormProps> = ({
           </section>
 
           <section className="space-y-4">
-            <MultiSelect
-              label="Preferred Models"
-              options={modelOptions}
-              value={formData.preferredModels}
-              onChange={(values) => updateField('preferredModels', values)}
-              placeholder={modelOptions.length > 0 ? 'Select models...' : 'No models discovered yet'}
-              searchable
-              maxItems={8}
-              cyberBorder
-            />
-
-            <div className="grid gap-4 md:grid-cols-5">
-              <Input
-                label="Min Tokens"
-                type="number"
-                min={1}
-                value={formData.tokenMin}
-                onChange={(e) => updateField('tokenMin', Number(e.target.value))}
-                cyberBorder
-              />
-              <Input
-                label="Typical"
-                type="number"
-                min={1}
-                value={formData.tokenTypical}
-                onChange={(e) => updateField('tokenTypical', Number(e.target.value))}
-                cyberBorder
-              />
-              <Input
-                label="Max Tokens"
-                type="number"
-                min={1}
-                value={formData.tokenMax}
-                onChange={(e) => updateField('tokenMax', Number(e.target.value))}
-                cyberBorder
-              />
+            <div className="grid gap-4 md:grid-cols-2">
               <Input
                 label="Timeout (Minutes)"
                 type="number"
@@ -408,6 +311,30 @@ const AgentForm: React.FC<AgentFormProps> = ({
                 helpText="Controls how many tool-use loops the agent can take before it must finish."
               />
             </div>
+          </section>
+
+          <section className="grid gap-4 lg:grid-cols-2">
+            <TextArea
+              label="Output Contract"
+              value={formData.outputContract}
+              onChange={(e) => updateField('outputContract', e.target.value)}
+              minRows={3}
+              maxRows={6}
+              autoGrow
+              cyberBorder
+              placeholder="Expected answer shape, schemas, or quality bar."
+              helpText='Prompt guidance only. It is not automatically validated unless metadata.outputMode = "json" is also configured.'
+            />
+            <TextArea
+              label="Tool Policy"
+              value={formData.toolPolicy}
+              onChange={(e) => updateField('toolPolicy', e.target.value)}
+              minRows={3}
+              maxRows={6}
+              autoGrow
+              cyberBorder
+              placeholder="Tool preferences, limits, or permissions."
+            />
           </section>
 
           <section className="grid gap-4 lg:grid-cols-2">

@@ -5,7 +5,7 @@ import { Alert } from '../components/ui/Alert.js';
 import { Select } from '../components/forms/Select.js';
 import { MultiSelect } from '../components/forms/MultiSelect.js';
 import { AgentForm } from './AgentForm.js';
-import { apiClient, type AgentMutationInput, type AgentRecord, type ModelRecord } from '../services/index.js';
+import { apiClient, type AgentMutationInput, type AgentRecord } from '../services/index.js';
 
 interface AgentFilter {
   tags: string[];
@@ -73,7 +73,6 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
   subtitle = 'Manage AI agent configurations',
 }) => {
   const [agents, setAgents] = useState<AgentRecord[]>([]);
-  const [models, setModels] = useState<ModelRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -82,18 +81,14 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
   const [filter, setFilter] = useState<AgentFilter>({
     tags: [],
     complexity: '',
-    isActive: '',
+    isActive: 'true',
   });
 
   const loadAgents = useCallback(async () => {
     try {
       setLoading(true);
-      const [agentData, modelData] = await Promise.all([
-        apiClient.listAgents(),
-        apiClient.listModels(),
-      ]);
+      const agentData = await apiClient.listAgents();
       setAgents(agentData);
-      setModels(modelData);
       setError(null);
     } catch (err) {
       console.error('Failed to load agents:', err);
@@ -172,12 +167,11 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
         complexityMax: agentData.complexityMax ?? 5,
         tokenProfile: agentData.tokenProfile || {
           min: 100,
-          max: 1000,
-          typical: 500,
+          max: 1500,
+          typical: 750,
         },
-        preferredModels: agentData.preferredModels,
         timeoutMs: agentData.timeoutMs ?? 30000,
-        maxRetries: agentData.maxRetries ?? 2,
+        maxRetries: agentData.maxRetries ?? 5,
         isActive: agentData.isActive ?? true,
         configSource: agentData.configSource || 'static',
         description: agentData.description,
@@ -261,7 +255,7 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
               onChange={(values) => handleFilterChange('tags', values)}
               placeholder="Select tags..."
               searchable
-              size="sm"
+              size="md"
               cyberBorder
               glitchEffect
             />
@@ -275,6 +269,7 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
               onChange={(e) =>
                 handleFilterChange('complexity', e.target.value)
               }
+              size="md"
               cyberBorder
             />
           </div>
@@ -291,6 +286,7 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
               onChange={(e) =>
                 handleFilterChange('isActive', e.target.value)
               }
+              size="md"
               cyberBorder
               glitchEffect
             />
@@ -362,9 +358,6 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
                             complexity {agent.complexityMin}-{agent.complexityMax}
                           </span>
                           <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] font-mono text-text-primary">
-                            typical {agent.tokenProfile.typical}
-                          </span>
-                          <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] font-mono text-text-primary">
                             {formatMinutes(agent.timeoutMs)}
                           </span>
                           <span className="rounded-full border border-accent-secondary/20 bg-accent-secondary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-accent-secondary">
@@ -412,26 +405,6 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
                                 {tag}
                               </span>
                             ))
-                          )}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="text-[11px] uppercase tracking-wide text-text-muted mb-2">
-                          Preferred Models
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {agent.preferredModels && agent.preferredModels.length > 0 ? (
-                            agent.preferredModels.map((model) => (
-                              <span
-                                key={model}
-                                className="rounded-full border border-accent-secondary/20 bg-accent-secondary/10 px-2 py-0.5 text-[10px] text-accent-secondary"
-                              >
-                                {model}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-xs text-text-muted">No preferred models</span>
                           )}
                         </div>
                       </div>
@@ -490,9 +463,6 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
                         complexity {agent.complexityMin}-{agent.complexityMax}
                       </span>
                       <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] font-mono text-text-primary">
-                        typical {agent.tokenProfile.typical}
-                      </span>
-                      <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-[10px] font-mono text-text-primary">
                         {formatMinutes(agent.timeoutMs)}
                       </span>
                       <span className="rounded-full border border-accent-secondary/20 bg-accent-secondary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-accent-secondary">
@@ -516,26 +486,6 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
                               {tag}
                             </span>
                           ))
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="text-[11px] uppercase tracking-wide text-text-muted mb-2">
-                        Preferred Models
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {agent.preferredModels && agent.preferredModels.length > 0 ? (
-                          agent.preferredModels.map((model) => (
-                            <span
-                              key={model}
-                              className="rounded-full border border-accent-secondary/20 bg-accent-secondary/10 px-2 py-0.5 text-[10px] text-accent-secondary"
-                            >
-                              {model}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-xs text-text-muted">No preferred models</span>
                         )}
                       </div>
                     </div>
@@ -570,7 +520,6 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
       {showForm && (
         <AgentForm
           agent={editingAgent}
-          availableModels={models}
           onSubmit={handleFormSubmit}
           onCancel={handleFormCancel}
         />

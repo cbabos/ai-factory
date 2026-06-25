@@ -1,0 +1,55 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@components/*": ["./components/*"],
+      "@pages/*": ["./pages/*"],
+      "@theme/*": ["./theme/*"],
+      "@hooks/*": ["./hooks/*"],
+      "@services/*": ["./services/*"]
+    },
+    "typeRoots": ["./node_modules/@types", "./src/types"]
+  },
+  "include": [
+    "./App.tsx",
+    "./main.tsx",
+    "./index.tsx",
+    "./components/**/*.ts",
+    "./components/**/*.tsx",
+    "./hooks/**/*.ts",
+    "./pages/**/*.ts",
+    "./pages/**/*.tsx",
+    "./services/**/*.ts",
+    "./theme/**/*.ts",
+    "./theme/**/*.tsx",
+    "./utils/**/*.ts"
+  ],
+  "exclude": [
+    "./**/__stories__/**",
+    "./**/__tests__/**",
+    "./.storybook/**",
+    "./dist",
+    "./node_modules",
+    "./coverage"
+  ]
+}

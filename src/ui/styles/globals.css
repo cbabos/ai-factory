@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --theme-primary: #00f3ff;
+  --theme-primary-rgb: 0 243 255;
+  --theme-secondary: #ff00ff;
+  --theme-secondary-rgb: 255 0 255;
+  --theme-accent: #bc13fe;
+  --theme-accent-rgb: 188 19 254;
+  --theme-success: #00ff3c;
+  --theme-success-rgb: 0 255 60;
+  --theme-warning: #ffb800;
+  --theme-warning-rgb: 255 184 0;
+  --theme-error: #ff3131;
+  --theme-error-rgb: 255 49 49;
+  --theme-muted: #5a5a5a;
+  --theme-muted-rgb: 90 90 90;
+  --theme-background: #0a0a12;
+  --theme-background-rgb: 10 10 18;
+  --theme-foreground: #ffffff;
+  --theme-foreground-rgb: 255 255 255;
+  --theme-font-family: 'Segoe UI Variable', 'Roboto', 'Helvetica Neue', sans-serif;
+  --theme-borderRadius: 12px;
+  --theme-shadow: 0 4px 20px rgba(0, 243, 255, 0.2);
+  --theme-glow: 0 0 15px rgba(0, 243, 255, 0.4);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--theme-background);
+  color: var(--theme-foreground);
+  font-family: var(--theme-font-family);
+  transition:
+    background-color 200ms ease,
+    color 200ms ease;
+}
+
+.tasks-toolbar-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 180px 180px;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 64rem;
+}
+
+.tasks-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.tasks-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(380px, 420px);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.tasks-table-header,
+.tasks-table-row {
+  display: grid;
+  grid-template-columns:
+    minmax(210px, 1fr)
+    minmax(72px, 0.45fr)
+    minmax(88px, 0.5fr)
+    minmax(104px, 0.6fr)
+    minmax(68px, 0.4fr);
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.tasks-table-header {
+  padding: 0.75rem 1.25rem;
+}
+
+.tasks-mobile-row {
+  display: none;
+}
+
+@media (max-width: 1180px) {
+  .tasks-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .tasks-toolbar-grid {
+    grid-template-columns: 1fr;
+    max-width: none;
+  }
+
+  .tasks-status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1023px) {
+  .tasks-table-header,
+  .tasks-table-row {
+    display: none;
+  }
+
+  .tasks-mobile-row {
+    display: block;
+  }
+}
+
+@media (max-width: 560px) {
+  .tasks-status-grid {
+    grid-template-columns: 1fr;
+  }
+}

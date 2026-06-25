@@ -1,0 +1,101 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-accent-primary: var(--theme-primary, #00f3ff);
+  --color-accent-secondary: var(--theme-secondary, #ff00ff);
+  --color-accent-tertiary: var(--theme-success, #00ff3c);
+  --color-accent-warning: var(--theme-warning, #ffb800);
+  --color-accent-danger: var(--theme-error, #ff3131);
+  --color-accent-info: var(--theme-accent, #bc13fe);
+  --color-accent-muted: var(--theme-muted, #5a5a5a);
+  
+  --color-bg-panel: var(--theme-background, #0a0a12);
+  --color-bg-primary: var(--theme-background, #0a0a12);
+  --color-bg-card: rgba(10, 10, 18, 0.8);
+  
+  --color-text-primary: var(--theme-foreground, #ffffff);
+  --color-text-secondary: rgba(255, 255, 255, 0.6);
+  --color-text-muted: rgba(255, 255, 255, 0.4);
+}
+
+@layer base {
+  :root {
+    --theme-primary: #00f3ff;
+    --theme-secondary: #ff00ff;
+    --theme-accent: #bc13fe;
+    --theme-success: #00ff3c;
+    --theme-warning: #ffb800;
+    --theme-error: #ff3131;
+    --theme-muted: #5a5a5a;
+    --theme-border: #00f3ff/30;
+    --theme-background: #0a0a12;
+    --theme-foreground: #ffffff;
+    --theme-font-family: 'Segoe UI Variable', 'Roboto', 'Helvetica Neue', sans-serif;
+    --theme-borderRadius: 12px;
+    --theme-shadow: 0 4px 20px rgba(0, 243, 255, 0.2);
+    --theme-glow: 0 0 15px rgba(0, 243, 255, 0.4);
+  }
+
+  * {
+    @apply border-accent-primary/20;
+  }
+
+  body {
+    @apply bg-bg-panel text-text-primary transition-colors duration-300;
+  }
+}
+
+@layer components {
+  .rounded-cyber {
+    @apply rounded-[12px];
+  }
+
+  .shadow-glow-primary {
+    @apply shadow-[0_0_20px_rgba(0,243,255,0.2)];
+  }
+
+  .border-glow {
+    @apply border-accent-primary/30;
+    @apply shadow-[0_0_10px_rgba(0,243,255,0.3)];
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-accent-primary to-accent-secondary;
+  }
+
+  .animate-glow {
+    animation: glow 2s ease-in-out infinite alternate;
+  }
+
+  .animate-border-glow {
+    animation: border-glow 2s ease-in-out infinite;
+  }
+}
+
+@keyframes glow {
+  0% {
+    box-shadow: 0 0 5px rgba(0, 243, 255, 0.2),
+      0 0 10px rgba(0, 243, 255, 0.15);
+  }
+  100% {
+    box-shadow: 0 0 15px rgba(0, 243, 255, 0.4),
+      0 0 25px rgba(0, 243, 255, 0.25);
+  }
+}
+
+@keyframes border-glow {
+  0% {
+    border-color: rgba(0, 243, 255, 0.2);
+    box-shadow: 0 0 5px rgba(0, 243, 255, 0.1);
+  }
+  50% {
+    border-color: rgba(0, 243, 255, 0.5);
+    box-shadow: 0 0 10px rgba(0, 243, 255, 0.3);
+  }
+  100% {
+    border-color: rgba(0, 243, 255, 0.2);
+    box-shadow: 0 0 5px rgba(0, 243, 255, 0.1);
+  }
+}

@@ -15,6 +15,7 @@ import {
 } from "../responders/index.js";
 import type { ILLMCaller, LLMCallOptions, LLMCallResult } from "../core/interfaces.js";
 import { NoopLogger } from "../core/logger.js";
+import { InMemoryTaskRepository } from "../core/task-repository.js";
 import type { FactoryConfig } from "../core/types.js";
 
 function makeFakeCaller(): ILLMCaller {
@@ -130,7 +131,14 @@ function makeSecrets(): EnvSecretsProvider {
 
 describe("AIFactory integration", () => {
   it("processes a cron signal through the full pipeline", async () => {
-    const factory = new AIFactory({ config: makeConfig(), secrets: makeSecrets(), callers: new Map([["openai", makeFakeCaller()]]), logger: new NoopLogger() });
+    const taskRepository = new InMemoryTaskRepository();
+    const factory = new AIFactory({
+      config: makeConfig(),
+      secrets: makeSecrets(),
+      callers: new Map([["openai", makeFakeCaller()]]),
+      logger: new NoopLogger(),
+      taskRepository,
+    });
 
     factory.registerAdapter(new CronAdapter());
     factory.registerResponder(new CronResponder());
@@ -149,6 +157,11 @@ describe("AIFactory integration", () => {
     await startPromise;
 
     expect(completedTasks.length).toBeGreaterThanOrEqual(1);
+    const records = await taskRepository.getAll();
+    expect(records.length).toBeGreaterThanOrEqual(1);
+    const completedRecord = records.find((record) => record.status === "completed");
+    expect(completedRecord).toBeDefined();
+    expect((completedRecord?.conversation ?? []).length).toBeGreaterThan(0);
   });
 
   it("processes a webhook signal via manual injection", async () => {

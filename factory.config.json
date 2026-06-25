@@ -54,8 +54,8 @@
       "provider": "omlx",
       "modelId": "Qwen3-Coder-Next-4bit",
       "maxTokens": 32768,
-      "costPer1kInput": 0.001,
-      "costPer1kOutput": 0.5,
+      "costPer1kInput": 0.00005,
+      "costPer1kOutput": 0.0002,
       "capabilities": [
         "analysis",
         "code-generation",

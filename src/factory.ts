@@ -1,4 +1,4 @@
-import type {
+import {
   FactoryConfig,
   ILLMCaller,
   ISensor,
@@ -10,7 +10,9 @@ import type {
   HealthCheck,
   IRepository,
   ModelInfo,
+  WorkflowEngine,
 } from "./core/index.js";
+import type { IAgent } from "./core/index.js";
 import {
   EventBus,
   Tracer,
@@ -54,7 +56,18 @@ import {
 } from "./agents/index.js";
 import type { IToolRegistry } from "./tools/interfaces.js";
 import type { ITaskRepository } from "./core/task-repository.js";
+import type {
+  IWorkflowArtifactRepository,
+  IHumanTaskRepository,
+  IWorkflowRepository,
+  IWorkflowRunRepository,
+} from "./core/workflow-repository.js";
 import type { SecretsProvider } from "./core/secrets.js";
+import { SQLiteAgentStore } from "./core/agent-store.js";
+import { SQLiteModelStore } from "./core/model-store.js";
+import { SQLiteConfigStore } from "./core/sqlite-config-store.js";
+import { ApiServer } from "./core/api-server.js";
+import { setSettingsStore as setupSettingsStore } from "./core/api-handlers/settings.js";
 
 export interface AIFactoryOptions {
   config: FactoryConfig;
@@ -63,7 +76,12 @@ export interface AIFactoryOptions {
   logger?: ILogger;
   repository?: IRepository<{ id: string }>;
   taskRepository?: ITaskRepository;
+  workflowRepository?: IWorkflowRepository;
+  workflowRunRepository?: IWorkflowRunRepository;
+  humanTaskRepository?: IHumanTaskRepository;
+  artifactRepository?: IWorkflowArtifactRepository;
   tools?: IToolRegistry;
+  apiServerOptions?: import("./core/api-types.js").ApiServerOptions;
 }
 
 export class AIFactory {
@@ -80,6 +98,10 @@ export class AIFactory {
   private healthChecker: HealthChecker;
   private repository?: IRepository<{ id: string }>;
   private taskRepository?: ITaskRepository;
+  private workflowRepository?: IWorkflowRepository;
+  private workflowRunRepository?: IWorkflowRunRepository;
+  private humanTaskRepository?: IHumanTaskRepository;
+  private artifactRepository?: IWorkflowArtifactRepository;
 
   private config: FactoryConfig;
   private callers: Map<Provider, ILLMCaller>;
@@ -88,40 +110,74 @@ export class AIFactory {
   private defaultCaller: ILLMCaller;
   private dispatcher: Dispatcher;
   private aggregator: Aggregator;
+  private workflowEngine?: WorkflowEngine;
   private tools?: IToolRegistry;
+  private agents: Map<string, IAgent>;
 
   private sensors: ISensor[] = [];
   private adapters = new Map<string, ISignalAdapter>();
   private responders = new Map<string, IResponder>();
   private running = false;
+  private apiServer?: ApiServer;
+  private settingsStore?: SQLiteConfigStore;
+  private agentStore?: SQLiteAgentStore;
+  private modelStore?: SQLiteModelStore;
+  private baseCatalogModels: ModelInfo[];
 
   constructor(options: AIFactoryOptions) {
-    const { config, secrets, callers: injectedCallers, logger, repository, taskRepository, tools } = options;
+    const {
+      config,
+      secrets,
+      callers: injectedCallers,
+      logger,
+      repository,
+      taskRepository,
+      workflowRepository,
+      workflowRunRepository,
+      humanTaskRepository,
+      artifactRepository,
+      tools,
+      apiServerOptions,
+    } = options;
 
     this.config = config;
     this.logger = logger ?? new ConsoleLogger({ namespace: "AIFactory", level: "info" });
     this.repository = repository as IRepository<{ id: string }> | undefined;
     this.taskRepository = taskRepository;
+    this.workflowRepository = workflowRepository;
+    this.workflowRunRepository = workflowRunRepository;
+    this.humanTaskRepository = humanTaskRepository;
+    this.artifactRepository = artifactRepository;
     this.tools = tools;
     this.eventBus = new EventBus(new NoopLogger());
     this.tracer = new Tracer();
+
+    if (apiServerOptions) {
+      this.apiServer = new ApiServer(apiServerOptions);
+      this.agentStore = new SQLiteAgentStore("./ai-factory.db");
+      this.modelStore = new SQLiteModelStore("./ai-factory.db");
+    }
+
+    const runtimeModels = this.resolveRuntimeModels(config.models);
+    const runtimeAgents = this.resolveRuntimeAgents(config.agents);
+    this.baseCatalogModels = runtimeModels;
 
     this.budgetTracker = new BudgetTracker(this.eventBus);
     this.budgetTracker.loadConfig({
       defaultCap: config.budget.defaultCap,
       softCapRatio: config.budget.softCapRatio,
     });
-    const providers = [...new Set(config.models.map((m) => m.provider))];
+    const providers = [...new Set(runtimeModels.map((m) => m.provider))];
     this.budgetTracker.initialize(providers);
 
     this.agentRegistry = new AgentRegistry(this.eventBus);
-    for (const manifest of config.agents) {
+    for (const manifest of runtimeAgents) {
       this.agentRegistry.register(manifest);
     }
 
     this.metricsCollector = new MetricsCollector(this.eventBus);
 
-    this.callers = injectedCallers ?? this.buildCallers(config, secrets, this.breakers);
+    this.callers = injectedCallers ?? this.buildCallers(runtimeModels, secrets, this.breakers);
     const defaultCaller = this.callers.values().next().value;
     if (!defaultCaller) {
       throw new Error("No LLM callers configured");
@@ -133,10 +189,17 @@ export class AIFactory {
     // models are actually available, so the runtime can fall back to the first
     // available model when the config does not name one.
     const agents = this.buildAgents(defaultCaller, this.tools);
+    this.agents = agents;
     this.dispatcher = new Dispatcher(
       this.agentRegistry,
       agents,
       config.dispatch.maxConcurrency,
+      async (subTask, result) => {
+        if (!this.taskRepository || !result.conversation || result.conversation.length === 0) {
+          return;
+        }
+        await this.taskRepository.appendConversation(subTask.parentTaskId, result.conversation);
+      },
     );
 
     this.healthChecker = new HealthChecker(
@@ -151,7 +214,8 @@ export class AIFactory {
 
     // Use the static catalog as a starting point; initialize() will merge in
     // discovered models and pick a default estimator model if needed.
-    this.orchestrator = this.buildOrchestrator(config.models);
+    this.orchestrator = this.buildOrchestrator(runtimeModels);
+    this.workflowEngine = this.buildWorkflowEngine(runtimeModels);
   }
 
   registerSensor(sensor: ISensor): void {
@@ -166,10 +230,38 @@ export class AIFactory {
     this.responders.set(responder.channel, responder);
   }
 
+  setSettingsStore(store: SQLiteConfigStore): void {
+    this.settingsStore = store;
+    if (this.apiServer) {
+      setupSettingsStore(this.apiServer.getApp(), store);
+    }
+  }
+
   async initialize(): Promise<void> {
+    if (this.apiServer) {
+      await this.apiServer.initialize(
+        this.agentStore,
+        this.modelStore,
+        this.taskRepository,
+        this.workflowRepository,
+        this.workflowRunRepository,
+        this.humanTaskRepository,
+        this.artifactRepository,
+        this.agentRegistry,
+        undefined,
+        this.tracer,
+        this.budgetTracker,
+        async (humanTaskId, response) => this.respondToHumanTask(humanTaskId, response),
+        async (input) => this.submitApiTask(input),
+      );
+    }
+
+    const runtimeModels = this.resolveRuntimeModels(this.config.models);
+    this.baseCatalogModels = runtimeModels;
+
     const catalog = new ModelCatalog(
       [...this.callers.values()],
-      this.config.models,
+      runtimeModels,
       this.logger,
     );
 
@@ -181,6 +273,7 @@ export class AIFactory {
         modelId: e.discovered.modelId,
         ownedBy: e.discovered.ownedBy,
       }));
+      this.persistDiscoveredModels(discovered);
       this.logger.info(`Discovered ${discovered.length} model(s): ${discovered.map((m) => `${m.provider}:${m.modelId}`).join(", ") || "none"}`);
     } catch (err) {
       this.logger.warn(
@@ -203,10 +296,16 @@ export class AIFactory {
     }
 
     this.orchestrator = this.buildOrchestrator(mergedCatalog);
+    this.workflowEngine = this.buildWorkflowEngine(mergedCatalog);
   }
 
   async start(): Promise<void> {
     this.running = true;
+
+    // Start API server if enabled
+    if (this.apiServer) {
+      await this.apiServer.start();
+    }
 
     for (const sensor of this.sensors) {
       sensor.signals.subscribe((raw) => this.onSignal(raw));
@@ -222,7 +321,10 @@ export class AIFactory {
 
       const prioritized = this.prioritizer.prioritize(tasks);
       for (const task of prioritized) {
-        const result = await this.orchestrator.execute(task);
+        if (this.taskRepository) {
+          await this.taskRepository.setStatus(task.id, "running");
+        }
+        const result = await this.executeTask(task);
         await this.deliverResult(result, task);
       }
     }
@@ -236,6 +338,70 @@ export class AIFactory {
     this.healthChecker.destroy();
     this.metricsCollector.destroy();
     this.budgetTracker.destroy();
+
+    if (this.apiServer) {
+      await this.apiServer.stop();
+    }
+  }
+
+  async respondToHumanTask(humanTaskId: string, response: unknown): Promise<FinalResult> {
+    if (!this.workflowEngine) {
+      throw new Error("Workflow engine is not configured");
+    }
+
+    const result = await this.workflowEngine.resumeHumanTask(humanTaskId, response);
+    const status = this.getResultStatus(result);
+    if (this.taskRepository && status === "waiting_for_human") {
+      await this.taskRepository.saveResult(result.taskId, result, status);
+    }
+
+    if (status === "waiting_for_human") {
+      return result;
+    }
+
+    const record = await this.taskRepository?.get(result.taskId);
+    if (record) {
+      await this.deliverResult(result, record.task);
+    }
+
+    return result;
+  }
+
+  async submitApiTask(input: Record<string, unknown>): Promise<Task> {
+    const priority = input.priority;
+    const workflowId = input.workflowId;
+    const workflowVersion = input.workflowVersion;
+    const context = input.context;
+
+    const task: Task = {
+      id: crypto.randomUUID(),
+      description: String(input.description),
+      context: typeof context === "object" && context !== null
+        ? structuredClone(context as Record<string, unknown>)
+        : {},
+      origin: {
+        channel: "api",
+        replyTo: typeof input.replyTo === "string" ? input.replyTo : "",
+        messageId: typeof input.messageId === "string" ? input.messageId : "",
+        rawPayload: structuredClone(input),
+      },
+      priority: priority === "critical" || priority === "high" || priority === "batch" || priority === "normal"
+        ? priority
+        : "normal",
+      createdAt: Date.now(),
+      workflow: typeof workflowId === "string" && workflowId.length > 0
+        ? {
+            workflowId,
+            workflowVersion: typeof workflowVersion === "number" ? workflowVersion : undefined,
+          }
+        : undefined,
+    };
+
+    if (this.taskRepository) {
+      await this.taskRepository.saveTask(task);
+    }
+    await this.taskQueue.enqueue(task);
+    return task;
   }
 
   getEventBus(): EventBus {
@@ -258,12 +424,12 @@ export class AIFactory {
     discovered: { provider: string; modelId: string; ownedBy?: string }[],
   ): ModelInfo[] {
     const staticByKey = new Map(
-      this.config.models.map((m) => [`${m.provider}:${m.modelId}`, m]),
+      this.baseCatalogModels.map((m) => [`${m.provider}:${m.modelId}`, m]),
     );
 
     // Static config defines authoritative capabilities, cost, and priority.
     // Preserve that order first.
-    const ordered: ModelInfo[] = [...this.config.models];
+    const ordered: ModelInfo[] = [...this.baseCatalogModels];
     const added = new Set<string>(staticByKey.keys());
 
     // Append genuinely new discovered models at the end with conservative
@@ -300,6 +466,36 @@ export class AIFactory {
       eventBus: this.eventBus,
       tracer: this.tracer,
       decompositionThreshold: this.config.complexity.decompositionThreshold,
+      onConversationAppended: async (taskId, conversation) => {
+        if (!this.taskRepository) {
+          return;
+        }
+        await this.taskRepository.appendConversation(taskId, conversation);
+      },
+    });
+  }
+
+  private buildWorkflowEngine(catalog: ModelInfo[]): WorkflowEngine | undefined {
+    if (!this.workflowRepository || !this.workflowRunRepository || !this.humanTaskRepository) {
+      return undefined;
+    }
+
+    return new WorkflowEngine({
+      workflowRepository: this.workflowRepository,
+      workflowRunRepository: this.workflowRunRepository,
+      humanTaskRepository: this.humanTaskRepository,
+      artifactRepository: this.artifactRepository,
+      agents: this.agents,
+      modelSelector: new ModelSelector(catalog),
+      budgetTracker: this.budgetTracker,
+      eventBus: this.eventBus,
+      tracer: this.tracer,
+      onConversationAppended: async (taskId, conversation) => {
+        if (!this.taskRepository) {
+          return;
+        }
+        await this.taskRepository.appendConversation(taskId, conversation);
+      },
     });
   }
 
@@ -341,12 +537,12 @@ export class AIFactory {
   }
 
   private buildCallers(
-    config: FactoryConfig,
+    models: ModelInfo[],
     secrets: SecretsProvider,
     breakers: Map<Provider, CircuitBreaker>,
   ): Map<Provider, ILLMCaller> {
     const callers = new Map<Provider, ILLMCaller>();
-    const configuredProviders = new Set(config.models.map((m) => m.provider));
+    const configuredProviders = new Set(models.map((m) => m.provider));
     const rateLimiter = new RateLimiter({ maxPerSecond: 10, burstSize: 5 });
 
     const wrap = (provider: Provider, caller: ILLMCaller): ILLMCaller => {
@@ -405,6 +601,115 @@ export class AIFactory {
     return callers;
   }
 
+  private resolveRuntimeAgents(fallbackAgents: FactoryConfig["agents"]): FactoryConfig["agents"] {
+    if (!this.agentStore) {
+      return fallbackAgents;
+    }
+
+    for (const agent of fallbackAgents) {
+      if (this.agentStore.get(agent.id)) {
+        continue;
+      }
+
+      this.agentStore.save({
+        id: agent.id,
+        name: agent.id,
+        tags: agent.tags,
+        complexityMin: agent.complexityRange[0],
+        complexityMax: agent.complexityRange[1],
+        tokenProfileMin: agent.tokenProfile.min,
+        tokenProfileMax: agent.tokenProfile.max,
+        tokenProfileTypical: agent.tokenProfile.typical,
+        preferredModels: agent.preferredModels,
+        timeoutMs: agent.timeoutMs,
+        maxRetries: agent.maxRetries,
+        configSource: "static",
+      });
+    }
+
+    const storedAgents = this.agentStore
+      .getAll()
+      .filter((agent) => agent.isActive)
+      .map((agent) => ({
+        id: agent.id,
+        tags: agent.tags,
+        complexityRange: [agent.complexityMin, agent.complexityMax] as [number, number],
+        tokenProfile: {
+          min: agent.tokenProfile.min,
+          max: agent.tokenProfile.max,
+          typical: agent.tokenProfile.typical,
+        },
+        preferredModels: agent.preferredModels,
+        timeoutMs: agent.timeoutMs,
+        maxRetries: agent.maxRetries,
+      }));
+
+    return storedAgents.length > 0 ? storedAgents : fallbackAgents;
+  }
+
+  private resolveRuntimeModels(fallbackModels: FactoryConfig["models"]): ModelInfo[] {
+    if (!this.modelStore) {
+      return fallbackModels;
+    }
+
+    for (const model of fallbackModels) {
+      if (this.modelStore.get(model.provider, model.modelId)) {
+        continue;
+      }
+
+      this.modelStore.save({
+        provider: model.provider,
+        modelId: model.modelId,
+        maxTokens: model.maxTokens,
+        costPer1kInput: model.costPer1kInput,
+        costPer1kOutput: model.costPer1kOutput,
+        capabilities: model.capabilities,
+        configSource: "static",
+      });
+    }
+
+    const storedModels = this.modelStore
+      .getAllActive()
+      .map((model) => ({
+        provider: model.provider as Provider,
+        modelId: model.modelId,
+        maxTokens: model.maxTokens,
+        costPer1kInput: model.costPer1kInput,
+        costPer1kOutput: model.costPer1kOutput,
+        capabilities: model.capabilities,
+      }));
+
+    return storedModels.length > 0 ? storedModels : fallbackModels;
+  }
+
+  private persistDiscoveredModels(
+    discovered: { provider: string; modelId: string; ownedBy?: string }[],
+  ): void {
+    if (!this.modelStore) {
+      return;
+    }
+
+    const discoveredAt = Date.now();
+
+    for (const model of discovered) {
+      if (this.modelStore.get(model.provider, model.modelId)) {
+        continue;
+      }
+
+      this.modelStore.save({
+        provider: model.provider,
+        modelId: model.modelId,
+        maxTokens: 4096,
+        costPer1kInput: 0.001,
+        costPer1kOutput: 0.001,
+        capabilities: ["analysis"],
+        ownedBy: model.ownedBy,
+        configSource: "discovered",
+        discoveredAt,
+      });
+    }
+  }
+
   private buildAgents(
     caller: ILLMCaller,
     tools?: IToolRegistry,
@@ -448,6 +753,16 @@ export class AIFactory {
   }
 
   private async deliverResult(result: FinalResult, task: Task): Promise<void> {
+    const status = this.getResultStatus(result);
+    if (this.taskRepository) {
+      await this.taskRepository.saveResult(result.taskId, result, status);
+    }
+
+    if (status === "waiting_for_human") {
+      this.logger.info(`[Result] task ${result.taskId} is waiting for human input; skipping responder delivery`);
+      return;
+    }
+
     const responder = this.responders.get(task.origin.channel);
     if (!responder) {
       this.logger.warn(
@@ -456,10 +771,25 @@ export class AIFactory {
       return;
     }
     this.logger.info(`[Result] delivering result for task ${result.taskId} via ${task.origin.channel} (success=${result.success})`);
-    if (this.taskRepository) {
-      await this.taskRepository.saveResult(result.taskId, result, result.success ? "completed" : "failed", result.conversation);
-    }
     await responder.respond(result, task);
+  }
+
+  private async executeTask(task: Task): Promise<FinalResult> {
+    if (task.workflow && this.workflowEngine) {
+      return this.workflowEngine.execute(task);
+    }
+    return this.orchestrator.execute(task);
+  }
+
+  private getResultStatus(result: FinalResult): import("./core/types.js").TaskExecutionStatus {
+    const waitingForHuman = typeof result.output === "object"
+      && result.output !== null
+      && "waitingForHuman" in result.output
+      && result.output.waitingForHuman === true;
+    if (waitingForHuman) {
+      return "waiting_for_human";
+    }
+    return result.success ? "completed" : "failed";
   }
 
   private sleep(ms: number): Promise<void> {

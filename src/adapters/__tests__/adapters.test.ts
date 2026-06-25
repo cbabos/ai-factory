@@ -121,14 +121,21 @@ describe("FileSystemAdapter", () => {
     expect(signal.metadata.truncated).toBe(false);
   });
 
-  it("truncates oversized files", () => {
-    const bigFile = join(tmpDir, "big.txt");
-    writeFileSync(bigFile, "x".repeat(65 * 1024), "utf-8");
+  it("tags write-to-file directives with file-io and write capabilities", () => {
     const adapter = new FileSystemAdapter();
-    const raw = makeRaw("filesystem", { filePath: bigFile, event: "add" });
+    writeFileSync(filePath, "Write the system date to /Users/cbabos/work/ai-factory/date.md in markdown format.", "utf-8");
+    const raw = makeRaw("filesystem", { filePath, event: "changed" });
     const signal = adapter.adapt(raw);
-    expect(signal.metadata.truncated).toBe(true);
-    expect((signal.metadata.fileContent as string).length).toBe(64 * 1024);
-    expect(signal.content).toContain("truncated to 64KiB");
+    expect(signal.metadata.requiredCapabilities).toEqual(["file-io", "write"]);
+    expect(signal.metadata.outputPath).toBe("/Users/cbabos/work/ai-factory/date.md");
+  });
+
+  it("does not tag read-only file content as a write task", () => {
+    const adapter = new FileSystemAdapter();
+    writeFileSync(filePath, "Please summarize the contents of this file.", "utf-8");
+    const raw = makeRaw("filesystem", { filePath, event: "changed" });
+    const signal = adapter.adapt(raw);
+    expect(signal.metadata.requiredCapabilities).toBeUndefined();
+    expect(signal.metadata.outputPath).toBeUndefined();
   });
 });

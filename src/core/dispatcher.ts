@@ -11,16 +11,19 @@ export class Dispatcher
   private registry: IAgentRegistry;
   private agents: Map<string, IAgent>;
   private maxConcurrency: number;
+  private onSubTaskCompleted?: (subTask: SubTask, result: TaskResult) => Promise<void>;
 
   constructor(
     registry: IAgentRegistry,
     agents: Map<string, IAgent>,
     maxConcurrency: number,
+    onSubTaskCompleted?: (subTask: SubTask, result: TaskResult) => Promise<void>,
   ) {
     super();
     this.registry = registry;
     this.agents = agents;
     this.maxConcurrency = maxConcurrency;
+    this.onSubTaskCompleted = onSubTaskCompleted;
   }
 
   async execute(subTasks: SubTask[]): Promise<TaskResult[]> {
@@ -52,6 +55,7 @@ export class Dispatcher
 
       const result = await agent.execute(subTask);
       results.set(subTask.id, result);
+      await this.onSubTaskCompleted?.(subTask, result);
     };
 
     while (completed.size < subTasks.length) {

@@ -4,14 +4,18 @@ import type { ITaskRepository, TaskRecord } from "./task-repository.js";
 
 export class SQLiteTaskRepository implements ITaskRepository {
   private readonly db: DatabaseSync;
+  private readonly tableName: string;
   private readonly getStmt: StatementSync;
   private readonly getAllStmt: StatementSync;
   private readonly saveStmt: StatementSync;
+  private readonly updateStatusStmt: StatementSync;
   private readonly updateResultStmt: StatementSync;
-  private readonly updateConversationStmt: StatementSync;
+  private readonly appendConversationStmt: StatementSync;
+  private readonly getConversationStmt: StatementSync;
 
   constructor(path: string, tableName: string = "tasks") {
     this.db = new DatabaseSync(path);
+    this.tableName = tableName;
     this.db.exec(
       `CREATE TABLE IF NOT EXISTS ${tableName} (
         id TEXT PRIMARY KEY,
@@ -22,6 +26,21 @@ export class SQLiteTaskRepository implements ITaskRepository {
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )`,
+    );
+    this.db.exec(
+      `CREATE TABLE IF NOT EXISTS ${tableName}_conversation (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        timestamp INTEGER NOT NULL,
+        metadata TEXT,
+        FOREIGN KEY(task_id) REFERENCES ${tableName}(id)
+      )`,
+    );
+    this.db.exec(
+      `CREATE INDEX IF NOT EXISTS idx_${tableName}_conversation_task_time
+       ON ${tableName}_conversation(task_id, timestamp, id)`,
     );
 
     this.getStmt = this.db.prepare(`SELECT * FROM ${tableName} WHERE id = ?`);
@@ -34,12 +53,24 @@ export class SQLiteTaskRepository implements ITaskRepository {
          status = excluded.status,
          updated_at = excluded.updated_at`,
     );
+    this.updateStatusStmt = this.db.prepare(
+      `UPDATE ${tableName} SET status = ?, updated_at = ? WHERE id = ?`,
+    );
     this.updateResultStmt = this.db.prepare(
-      `UPDATE ${tableName} SET result = ?, status = ?, conversation = ?, updated_at = ? WHERE id = ?`,
+      `UPDATE ${tableName} SET result = ?, status = ?, updated_at = ? WHERE id = ?`,
     );
-    this.updateConversationStmt = this.db.prepare(
-      `UPDATE ${tableName} SET conversation = ?, updated_at = ? WHERE id = ?`,
+    this.appendConversationStmt = this.db.prepare(
+      `INSERT INTO ${tableName}_conversation (task_id, role, content, timestamp, metadata)
+       VALUES (?, ?, ?, ?, ?)`,
     );
+    this.getConversationStmt = this.db.prepare(
+      `SELECT role, content, timestamp, metadata
+       FROM ${tableName}_conversation
+       WHERE task_id = ?
+       ORDER BY timestamp ASC, id ASC`,
+    );
+
+    this.migrateLegacyConversationRows();
   }
 
   async saveTask(task: Task): Promise<void> {
@@ -56,18 +87,44 @@ export class SQLiteTaskRepository implements ITaskRepository {
     );
   }
 
-  async saveResult(taskId: string, result: FinalResult, status: TaskRecord["status"], conversation?: ConversationTurn[]): Promise<void> {
-    this.updateResultStmt.run(JSON.stringify(result), status, conversation ? JSON.stringify(conversation) : null, Date.now(), taskId);
+  async setStatus(taskId: string, status: TaskRecord["status"]): Promise<void> {
+    this.updateStatusStmt.run(status, Date.now(), taskId);
   }
 
-  async saveConversation(taskId: string, conversation: ConversationTurn[]): Promise<void> {
-    this.updateConversationStmt.run(JSON.stringify(conversation), Date.now(), taskId);
+  async saveResult(taskId: string, result: FinalResult, status: TaskRecord["status"], conversation?: ConversationTurn[]): Promise<void> {
+    if (conversation && conversation.length > 0) {
+      this.appendConversationRows(taskId, conversation);
+    }
+    this.updateResultStmt.run(JSON.stringify(result), status, Date.now(), taskId);
+  }
+
+  async appendConversation(taskId: string, conversation: ConversationTurn[]): Promise<void> {
+    this.appendConversationRows(taskId, conversation);
+    this.updateStatusStmt.run("running", Date.now(), taskId);
+  }
+
+  async getConversation(taskId: string): Promise<ConversationTurn[]> {
+    const rows = this.getConversationStmt.all(taskId) as Record<string, unknown>[];
+    if (rows.length > 0) {
+      return rows.map((row) => this.rowToConversationTurn(row));
+    }
+
+    const taskRow = this.getStmt.get(taskId) as Record<string, unknown> | undefined;
+    if (!taskRow?.conversation) {
+      return [];
+    }
+
+    const legacyConversation = JSON.parse(taskRow.conversation as string) as ConversationTurn[];
+    this.appendConversationRows(taskId, legacyConversation);
+    return legacyConversation;
   }
 
   async get(taskId: string): Promise<TaskRecord | undefined> {
     const row = this.getStmt.get(taskId) as Record<string, unknown> | undefined;
     if (!row) return undefined;
-    return this.rowToRecord(row);
+    const record = this.rowToRecord(row);
+    record.conversation = await this.getConversation(taskId);
+    return record;
   }
 
   async getAll(): Promise<TaskRecord[]> {
@@ -75,8 +132,9 @@ export class SQLiteTaskRepository implements ITaskRepository {
     return rows.map((row) => this.rowToRecord(row));
   }
 
-  close(): void {
+  close(): Promise<void> {
     this.db.close();
+    return Promise.resolve();
   }
 
   private rowToRecord(row: Record<string, unknown>): TaskRecord {
@@ -85,11 +143,71 @@ export class SQLiteTaskRepository implements ITaskRepository {
       task: JSON.parse(row.task as string) as Task,
       result: row.result ? (JSON.parse(row.result as string) as FinalResult) : undefined,
       status: row.status as TaskRecord["status"],
-      conversation: row.conversation
-        ? (JSON.parse(row.conversation as string) as ConversationTurn[])
-        : undefined,
       createdAt: row.created_at as number,
       updatedAt: row.updated_at as number,
     };
+  }
+
+  private appendConversationRows(taskId: string, conversation: ConversationTurn[]): void {
+    if (conversation.length === 0) {
+      return;
+    }
+
+    for (const turn of conversation) {
+      this.appendConversationStmt.run(
+        taskId,
+        turn.role,
+        turn.content,
+        turn.timestamp,
+        turn.metadata ? JSON.stringify(turn.metadata) : null,
+      );
+    }
+  }
+
+  private rowToConversationTurn(row: Record<string, unknown>): ConversationTurn {
+    return {
+      role: row.role as ConversationTurn["role"],
+      content: row.content as string,
+      timestamp: row.timestamp as number,
+      metadata: row.metadata
+        ? (JSON.parse(row.metadata as string) as Record<string, unknown>)
+        : undefined,
+    };
+  }
+
+  private migrateLegacyConversationRows(): void {
+    const legacyRows = this.db.prepare(
+      `SELECT id, conversation
+       FROM ${this.tableName}
+       WHERE conversation IS NOT NULL`,
+    ).all() as Array<{ id: string; conversation: string | null }>;
+
+    const countStmt = this.db.prepare(
+      `SELECT COUNT(*) AS count
+       FROM ${this.tableName}_conversation
+       WHERE task_id = ?`,
+    );
+
+    for (const row of legacyRows) {
+      const serialized = row.conversation;
+      if (!serialized) {
+        continue;
+      }
+
+      const existing = countStmt.get(row.id) as { count: number };
+      if (existing.count > 0) {
+        continue;
+      }
+
+      try {
+        const conversation = JSON.parse(serialized) as ConversationTurn[];
+        if (Array.isArray(conversation) && conversation.length > 0) {
+          this.appendConversationRows(row.id, conversation);
+        }
+      } catch {
+        // Preserve the original row data in place and skip malformed legacy
+        // conversation payloads so opening the database remains non-destructive.
+      }
+    }
   }
 }

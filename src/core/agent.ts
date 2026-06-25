@@ -133,6 +133,7 @@ export abstract class Agent
             let prompt = basePrompt;
             let iteration = 0;
             let lastContent = "";
+            const executedToolKeys = new Set<string>();
 
             while (iteration < MAX_TOOL_ITERATIONS) {
               conversation.push({ role: "user", content: prompt, timestamp: Date.now() });
@@ -162,22 +163,30 @@ export abstract class Agent
                 break;
               }
 
+              const allRepeated = toolCalls.length > 0 && toolCalls.every((call) => {
+                const key = `${call.name}:${JSON.stringify(call.arguments)}`;
+                return executedToolKeys.has(key);
+              });
+
+              if (allRepeated && iteration + 1 < MAX_TOOL_ITERATIONS) {
+                const outputPath = subTask.context?.outputPath as string | undefined;
+                const writeHint = outputPath
+                  ? ` The task requires writing the result to ${outputPath}. Call writeFile with that path and the content you already have.`
+                  : " Provide a final answer with no tool block.";
+                prompt = `${basePrompt}\n\nYou already executed the following tool calls in this conversation; do not repeat them:\n${toolCalls.map((c) => `- ${c.name}: ${JSON.stringify(c.arguments)}`).join("\n")}\n${writeHint}`;
+                iteration++;
+                continue;
+              }
+
               const toolResults = await Promise.all(toolCalls.map((call) => this.tools!.execute(call)));
               for (const tr of toolResults) {
                 conversation.push({ role: "tool", content: JSON.stringify(tr), timestamp: Date.now(), metadata: { toolName: tr.name, success: tr.success } });
               }
+              for (const call of toolCalls) {
+                executedToolKeys.add(`${call.name}:${JSON.stringify(call.arguments)}`);
+              }
               prompt = `${basePrompt}\n\nYour previous response:\n${lastContent}\n\n${formatToolResults(toolResults)}\n\nContinue or provide a final answer. If a tool failed or does not exist, do not call it again; answer based on what you already know.`;
               iteration++;
-
-              // If the response still contains an unexecuted tool-like block after
-              // running the freshly parsed calls, the loop is about to exit. Give the
-              // model one extra turn to answer directly before we treat leftover
-              // markers or duplicate calls as a hard failure.
-              if (looksLikeToolCall(lastContent) && iteration < MAX_TOOL_ITERATIONS) {
-                prompt = `${basePrompt}\n\nYour previous response still contained a tool-like block:\n${lastContent}\n\nYou already have the tool results above. Please provide a final answer with no tool block.`;
-                iteration++;
-                continue;
-              }
             }
 
             // If the final response still contains an unexecuted tool-like block,

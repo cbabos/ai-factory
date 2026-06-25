@@ -4,7 +4,7 @@ export type Channel = "email" | "slack" | "webhook" | "cron" | "filesystem" | "a
 
 // ─── Providers & Models ──────────────────────────────────────
 
-export type Provider = "openai" | "anthropic" | "google" | "mistral" | "groq" | "deepseek" | "ollama" | "omlx";
+export type Provider = "openai" | "anthropic" | "google" | "mistral" | "groq" | "deepseek" | "ollama" | "omlx" | "openrouter";
 
 export interface ModelInfo {
   provider: Provider;
@@ -28,6 +28,13 @@ export type CapabilityTag = string;
 // ─── Priority ────────────────────────────────────────────────
 
 export type Priority = "critical" | "high" | "normal" | "batch";
+export type TaskExecutionStatus =
+  | "pending"
+  | "running"
+  | "waiting_for_human"
+  | "completed"
+  | "failed"
+  | "cancelled";
 
 // ─── Signal Layer ────────────────────────────────────────────
 
@@ -54,6 +61,11 @@ export interface TaskOrigin {
   rawPayload: unknown;
 }
 
+export interface WorkflowReference {
+  workflowId: string;
+  workflowVersion?: number;
+}
+
 export interface Task {
   id: string;
   description: string;
@@ -62,6 +74,7 @@ export interface Task {
   priority: Priority;
   createdAt: number;
   constraints?: TaskConstraints;
+  workflow?: WorkflowReference;
 }
 
 export interface TaskConstraints {
@@ -271,3 +284,17 @@ export interface FactoryConfig {
   models: ModelInfo[];
   agents: AgentManifest[];
 }
+
+// ─── Runtime Configuration ───────────────────────────────────────────────────
+
+export interface Settings {
+  id: string;
+  theme: 'synthwave84' | 'tokyonight' | 'zenburn';
+  ui_layout: string;
+  auto_refresh_ms: number;
+  max_tasks_display: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type UpdateSettingsInput = Omit<Settings, 'id' | 'createdAt' | 'updatedAt'>;

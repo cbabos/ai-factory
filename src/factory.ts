@@ -36,6 +36,7 @@ import {
   ResilientLLMCaller,
   MetricsCollector,
   HealthChecker,
+  DEFAULT_CAPABILITY_TAGS,
   type ILogger,
 } from "./core/index.js";
 import {
@@ -67,6 +68,7 @@ import type {
 import type { SecretsProvider } from "./core/secrets.js";
 import { SQLiteAgentStore } from "./core/agent-store.js";
 import { SQLiteModelStore } from "./core/model-store.js";
+import { SQLiteTagStore } from "./core/tag-store.js";
 import { SQLiteConfigStore } from "./core/sqlite-config-store.js";
 import { ApiServer } from "./core/api-server.js";
 import { setSettingsStore as setupSettingsStore } from "./core/api-handlers/settings.js";
@@ -127,6 +129,7 @@ export class AIFactory {
   private settingsStore?: SQLiteConfigStore;
   private agentStore?: SQLiteAgentStore;
   private modelStore?: SQLiteModelStore;
+  private tagStore?: SQLiteTagStore;
   private baseCatalogModels: ModelInfo[];
 
   constructor(options: AIFactoryOptions) {
@@ -161,6 +164,7 @@ export class AIFactory {
       this.apiServer = new ApiServer(apiServerOptions);
       this.agentStore = new SQLiteAgentStore("./ai-factory.db");
       this.modelStore = new SQLiteModelStore("./ai-factory.db");
+      this.tagStore = new SQLiteTagStore("./ai-factory.db");
     }
 
     const runtimeModels = this.resolveRuntimeModels(config.models);
@@ -241,10 +245,13 @@ export class AIFactory {
   }
 
   async initialize(): Promise<void> {
+    this.ensureDefaultTagsPersisted();
+
     if (this.apiServer) {
       await this.apiServer.initialize(
         this.agentStore,
         this.modelStore,
+        this.tagStore,
         this.taskRepository,
         this.workflowRepository,
         this.workflowRunRepository,
@@ -467,7 +474,11 @@ export class AIFactory {
 
   private buildOrchestrator(catalog: ModelInfo[]): Orchestrator {
     const estimator = new ComplexityEstimator(this.defaultCaller, this.defaultModel);
-    const decomposer = new TaskDecomposer(this.defaultCaller, this.defaultModel);
+    const decomposer = new TaskDecomposer(
+      this.defaultCaller,
+      this.defaultModel,
+      () => this.getRuntimeCapabilityTags(),
+    );
     const modelSelector = new ModelSelector(catalog);
 
     return new Orchestrator({
@@ -487,6 +498,35 @@ export class AIFactory {
         await this.taskRepository.appendConversation(taskId, conversation);
       },
     });
+  }
+
+  private getRuntimeCapabilityTags(): string[] {
+    if (!this.tagStore) {
+      return DEFAULT_CAPABILITY_TAGS.map((tag) => tag.id);
+    }
+
+    const activeTags = this.tagStore.getAllActive().map((tag) => tag.id);
+    return activeTags.length > 0 ? activeTags : DEFAULT_CAPABILITY_TAGS.map((tag) => tag.id);
+  }
+
+  private ensureDefaultTagsPersisted(): void {
+    if (!this.tagStore) {
+      return;
+    }
+
+    for (const tag of DEFAULT_CAPABILITY_TAGS) {
+      const existing = this.tagStore.get(tag.id);
+      if (existing) {
+        continue;
+      }
+
+      this.tagStore.save({
+        id: tag.id,
+        label: tag.label,
+        description: tag.description,
+        isActive: true,
+      });
+    }
   }
 
   private buildWorkflowEngine(catalog: ModelInfo[]): WorkflowEngine | undefined {

@@ -3,6 +3,8 @@ import { API_ENDPOINTS, API_BASE_URL } from './api.js';
 import type {
   AgentMutationInput,
   AgentRecord,
+  TagMutationInput,
+  TagRecord,
   ModelMutationInput,
   ModelRecord,
   PaginatedTasks,
@@ -154,6 +156,36 @@ export const apiClient = {
   async listModels(): Promise<ModelRecord[]> {
     const response = await requestJson<ApiListEnvelope<ModelRecord>>(API_ENDPOINTS.models);
     return response.data;
+  },
+
+  async listTags(includeInactive = true): Promise<TagRecord[]> {
+    const suffix = includeInactive ? '' : '?isActive=true';
+    const response = await requestJson<ApiListEnvelope<TagRecord>>(`${API_ENDPOINTS.tags}${suffix}`);
+    return response.data;
+  },
+
+  async createTag(tag: TagMutationInput): Promise<TagRecord> {
+    const response = await requestJson<ApiEnvelope<TagRecord>>(API_ENDPOINTS.tags, {
+      method: 'POST',
+      headers: defaultHeaders,
+      body: JSON.stringify(tag),
+    });
+    return response.data;
+  },
+
+  async updateTag(id: string, tag: Partial<TagMutationInput>): Promise<TagRecord> {
+    const response = await requestJson<ApiEnvelope<TagRecord>>(`${API_ENDPOINTS.tags}/${id}`, {
+      method: 'PUT',
+      headers: defaultHeaders,
+      body: JSON.stringify(tag),
+    });
+    return response.data;
+  },
+
+  async deleteTag(id: string): Promise<void> {
+    await requestJson<void>(`${API_ENDPOINTS.tags}/${id}`, {
+      method: 'DELETE',
+    });
   },
 
   async createModel(model: ModelMutationInput): Promise<ModelRecord> {

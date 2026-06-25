@@ -6,6 +6,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { IAgentStore } from "./agent-store.js";
 import type { IModelStore } from "./model-store.js";
+import type { ITagStore } from "./tag-store.js";
 import type { ITaskRepository } from "./task-repository.js";
 import type {
   IWorkflowArtifactRepository,
@@ -30,6 +31,13 @@ import {
   updateModel,
   deleteModel,
 } from "./api-handlers/models.js";
+import {
+  listTags,
+  getTag,
+  createTag,
+  updateTag,
+  deleteTag,
+} from "./api-handlers/tags.js";
 import {
   getTheme,
   setTheme,
@@ -74,6 +82,7 @@ export class ApiServer {
 
   private agentStore?: IAgentStore;
   private modelStore?: IModelStore;
+  private tagStore?: ITagStore;
   private taskRepository?: ITaskRepository;
   private workflowRepository?: IWorkflowRepository;
   private workflowRunRepository?: IWorkflowRunRepository;
@@ -140,6 +149,7 @@ export class ApiServer {
 
     this.setupAgentRoutes(router);
     this.setupModelRoutes(router);
+    this.setupTagRoutes(router);
     this.setupSettingsRoutes(router);
     this.setupTaskRoutes(router);
     this.setupWorkflowRoutes(router);
@@ -162,6 +172,14 @@ export class ApiServer {
     router.post("/models", this.wrapAsync(addModel));
     router.put("/models/:provider/:modelId", this.wrapAsync(updateModel));
     router.delete("/models/:provider/:modelId", this.wrapAsync(deleteModel));
+  }
+
+  private setupTagRoutes(router: Router): void {
+    router.get("/tags", this.wrapAsync(listTags));
+    router.get("/tags/:id", this.wrapAsync(getTag));
+    router.post("/tags", this.wrapAsync(createTag));
+    router.put("/tags/:id", this.wrapAsync(updateTag));
+    router.delete("/tags/:id", this.wrapAsync(deleteTag));
   }
 
   private setupSettingsRoutes(router: Router): void {
@@ -268,6 +286,7 @@ export class ApiServer {
   public async initialize(
     agentStore?: IAgentStore,
     modelStore?: IModelStore,
+    tagStore?: ITagStore,
     taskRepository?: ITaskRepository,
     workflowRepository?: IWorkflowRepository,
     workflowRunRepository?: IWorkflowRunRepository,
@@ -283,6 +302,7 @@ export class ApiServer {
   ): Promise<void> {
     this.agentStore = agentStore;
     this.modelStore = modelStore;
+    this.tagStore = tagStore;
     this.taskRepository = taskRepository;
     this.workflowRepository = workflowRepository;
     this.workflowRunRepository = workflowRunRepository;
@@ -301,6 +321,9 @@ export class ApiServer {
     }
     if (this.modelStore) {
       this.app.set("modelStore", this.modelStore);
+    }
+    if (this.tagStore) {
+      this.app.set("tagStore", this.tagStore);
     }
     if (this.taskRepository) {
       this.app.set("taskRepository", this.taskRepository);
@@ -409,6 +432,9 @@ export class ApiServer {
     }
     if (this.modelStore?.close) {
       await this.modelStore.close();
+    }
+    if (this.tagStore?.close) {
+      await this.tagStore.close();
     }
     if (this.taskRepository?.close) {
       await this.taskRepository.close();

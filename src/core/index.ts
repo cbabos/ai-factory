@@ -38,5 +38,7 @@ export * from "./starter-workflows.js";
 export * from "./sqlite-config-store.js";
 export * from "./agent-store.js";
 export * from "./model-store.js";
+export * from "./tag-store.js";
+export * from "./tag-vocabulary.js";
 export * from "./api-server.js";
 export * from "./routing-llm-caller.js";

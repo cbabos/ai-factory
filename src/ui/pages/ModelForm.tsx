@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Input } from '../components/forms/Input.js';
+import { MultiSelect } from '../components/forms/MultiSelect.js';
 import { Select } from '../components/forms/Select.js';
 import { Button } from '../components/common/Button.js';
 import type { Provider } from '../../core/types.js';
-import type { ModelRecord } from '../services/index.js';
+import type { ModelRecord, TagRecord } from '../services/index.js';
 
 interface ModelFormState {
   provider: Provider;
@@ -32,6 +33,7 @@ const defaultState: ModelFormState = {
 export interface ModelFormProps {
   model?: ModelRecord | null;
   availableModels: ModelRecord[];
+  availableTags: TagRecord[];
   onClose: () => void;
   onSubmit: (modelData: Partial<ModelFormState>) => void;
 }
@@ -39,6 +41,7 @@ export interface ModelFormProps {
 export const ModelForm: React.FC<ModelFormProps> = ({
   model,
   availableModels,
+  availableTags,
   onClose,
   onSubmit,
 }) => {
@@ -156,23 +159,6 @@ export const ModelForm: React.FC<ModelFormProps> = ({
     }
   };
 
-  const handleAddCapability = () => {
-    const cap = prompt('Enter capability (e.g., text-generation, image-generation, coding):');
-    if (cap) {
-      setFormData(prev => ({
-        ...prev,
-        capabilities: [...prev.capabilities, cap],
-      }));
-    }
-  };
-
-  const handleRemoveCapability = (capability: string) => {
-    setFormData(prev => ({
-      ...prev,
-      capabilities: prev.capabilities.filter(c => c !== capability),
-    }));
-  };
-
   const handleSubmitLabel = model ? 'Update Model' : 'Add Model';
 
   return (
@@ -254,36 +240,29 @@ export const ModelForm: React.FC<ModelFormProps> = ({
             placeholder="e.g., OpenAI, Anthropic"
           />
 
-          <div>
-            <label className="text-xs font-medium text-text-primary tracking-wider uppercase mb-2 block">
-              Capabilities
-            </label>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {formData.capabilities.map(cap => (
-                <span
-                  key={cap}
-                  className="bg-accent-primary/20 text-accent-primary border border-accent-primary/30 rounded-full px-3 py-1 text-sm flex items-center gap-2"
-                >
-                  {cap}
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveCapability(cap)}
-                    className="hover:text-accent-danger transition-colors"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleAddCapability}
-              startIcon="＋"
-            >
-              Add Capability
-            </Button>
-          </div>
+          <MultiSelect
+            label="Capabilities"
+            value={formData.capabilities}
+            onChange={(values) => handleChange('capabilities', values)}
+            options={[
+              ...availableTags
+                .filter((tag) => tag.isActive)
+                .map((tag) => ({
+                  value: tag.id,
+                  label: tag.label,
+                })),
+              ...formData.capabilities
+                .filter((capability) => !availableTags.some((tag) => tag.id === capability))
+                .map((capability) => ({
+                  value: capability,
+                  label: `${capability} (legacy)`,
+                })),
+            ]}
+            searchable
+            cyberBorder
+            placeholder="Select model capabilities..."
+            helpText="Shared tags used for routing and later model selection."
+          />
 
           <div className="flex items-center gap-3 p-4 bg-accent-primary/5 rounded-cyber border border-accent-primary/10">
             <input

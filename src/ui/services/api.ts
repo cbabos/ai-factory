@@ -14,6 +14,7 @@ export const API_BASE_URL =
 export const API_ENDPOINTS = {
   agents: `${API_BASE_URL}/api/agents`,
   models: `${API_BASE_URL}/api/models`,
+  tags: `${API_BASE_URL}/api/tags`,
   tasks: `${API_BASE_URL}/api/tasks`,
   workflows: `${API_BASE_URL}/api/workflows`,
   workflowRuns: `${API_BASE_URL}/api/workflow-runs`,

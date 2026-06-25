@@ -52,6 +52,33 @@ Dependencies:
 - Phase 1 can ship before this.
 - Phase 3 should not be finalized until shared tag data exists.
 
+Current progress:
+
+- Implemented a SQLite-backed `tags` store with first-class records:
+  - stable `id`
+  - editable `label`
+  - optional `description`
+  - active/inactive lifecycle
+- Added `/api/tags` CRUD endpoints.
+- Updated the Agents page to load tags from the shared API instead of deriving them from existing agents.
+- Replaced the Agent form's comma-separated tag input with a DB-backed multi-select.
+- Added an Agents-page tag manager for:
+  - creating tags
+  - editing label/description
+  - retiring/restoring tags
+- Updated Model capabilities to use the shared tag source instead of ad-hoc per-form entry.
+- Updated workflow step `capabilityTags` in the structured editor to use the shared tag source instead of comma-separated free text.
+- Replaced the decomposer's hardcoded capability-tag prompt list with a shared default vocabulary plus live tag-store lookup at runtime.
+- Seeded the shared default capability vocabulary into the tag store so first-run systems start with a curated baseline instead of an empty tag list.
+- Preserved visibility of legacy tag values already attached to agents so old data remains editable during migration.
+- Preserved visibility of legacy model/workflow tag values during rollout so existing records remain editable before normalization.
+
+Remaining rollout in this phase:
+
+- Audit and normalize existing tags in stored agents and workflows.
+- Decide whether Models should get a dedicated tag manager entry point too, or continue reusing the Agents-page tag manager as the canonical CRUD surface.
+- Add validation and naming guidance so new tags do not drift into near-duplicates or overly broad catch-all labels.
+
 ## Phase 3: Agent Routing Redesign
 
 Scope:

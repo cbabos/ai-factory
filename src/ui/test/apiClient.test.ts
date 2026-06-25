@@ -207,6 +207,37 @@ describe('apiClient', () => {
     expect(result[0]?.status).toBe('active');
   });
 
+  it('lists active tags from the shared tag API', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        data: [
+          {
+            id: 'mcp',
+            label: 'MCP',
+            description: 'Model Context Protocol work',
+            version: 1,
+            isActive: true,
+            createdAt: 1,
+            updatedAt: 2,
+          },
+        ],
+        total: 1,
+      }),
+    } as Response);
+
+    const result = await apiClient.listTags(false);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3001/api/tags?isActive=true',
+      undefined,
+    );
+    expect(result[0]?.id).toBe('mcp');
+    expect(result[0]?.label).toBe('MCP');
+  });
+
   it('creates workflow-backed tasks through the task API', async () => {
     fetchMock.mockResolvedValue({
       ok: true,

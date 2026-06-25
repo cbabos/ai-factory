@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '../components/controls/Button.js';
 import { Input } from '../components/forms/Input.js';
+import { MultiSelect } from '../components/forms/MultiSelect.js';
 import { TextArea } from '../components/forms/TextArea.js';
 import { Select } from '../components/forms/Select.js';
-import type { AgentMutationInput, AgentRecord } from '../services/index.js';
+import type { AgentMutationInput, AgentRecord, TagRecord } from '../services/index.js';
 
 interface AgentFormProps {
   agent: AgentRecord | null;
+  availableTags: TagRecord[];
   onSubmit: (agent: Partial<AgentMutationInput>) => void;
   onCancel: () => void;
 }
@@ -14,7 +16,7 @@ interface AgentFormProps {
 interface AgentFormState {
   name: string;
   description: string;
-  tagsText: string;
+  tags: string[];
   complexityBand: 'focused' | 'balanced' | 'demanding' | 'any';
   timeoutMinutes: number;
   iterationCount: number;
@@ -78,7 +80,7 @@ function createFormState(agent: AgentRecord | null): AgentFormState {
   return {
     name: agent?.name ?? '',
     description: agent?.description ?? '',
-    tagsText: agent?.tags.join(', ') ?? '',
+    tags: agent?.tags ?? [],
     complexityBand: deriveComplexityBand(agent),
     timeoutMinutes: agent ? Number((agent.timeoutMs / 60000).toFixed(2)) : 1,
     iterationCount: agent?.maxRetries ?? 5,
@@ -91,13 +93,6 @@ function createFormState(agent: AgentRecord | null): AgentFormState {
       ? JSON.stringify(extraMetadata, null, 2)
       : '',
   };
-}
-
-function parseTags(value: string): string[] {
-  return value
-    .split(',')
-    .map((tag) => tag.trim())
-    .filter((tag, index, tags) => tag.length > 0 && tags.indexOf(tag) === index);
 }
 
 function parseExtraMetadata(value: string): Record<string, unknown> {
@@ -122,6 +117,7 @@ function withOptionalText(
 
 const AgentForm: React.FC<AgentFormProps> = ({
   agent,
+  availableTags,
   onSubmit,
   onCancel,
 }) => {
@@ -179,7 +175,7 @@ const AgentForm: React.FC<AgentFormProps> = ({
       id: agent?.id,
       name,
       description: formData.description.trim(),
-      tags: parseTags(formData.tagsText),
+      tags: formData.tags,
       ...complexity,
       tokenProfile: DEFAULT_AGENT_TOKEN_PROFILE,
       timeoutMs: Math.round(formData.timeoutMinutes * 60000),
@@ -269,13 +265,23 @@ const AgentForm: React.FC<AgentFormProps> = ({
           </section>
 
           <section className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-            <Input
+            <MultiSelect
               label="Tags"
-              value={formData.tagsText}
-              onChange={(e) => updateField('tagsText', e.target.value)}
+              value={formData.tags}
+              onChange={(values) => updateField('tags', values)}
+              options={[
+                ...availableTags.map((tag) => ({
+                  value: tag.id,
+                  label: tag.label,
+                })),
+                ...formData.tags
+                  .filter((tagId) => !availableTags.some((tag) => tag.id === tagId))
+                  .map((tagId) => ({ value: tagId, label: `${tagId} (legacy)` })),
+              ]}
+              searchable
               cyberBorder
-              placeholder="search, codebase, read-only"
-              helpText="Comma-separated capabilities used for routing."
+              placeholder="Select routing tags..."
+              helpText="Shared capability tags used for routing and future decomposition."
             />
             <Select
               label="Task Complexity"

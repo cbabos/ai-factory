@@ -110,6 +110,30 @@ describe("TaskDecomposer", () => {
     expect(options.responseFormat).toBe("json");
   });
 
+  it("uses the provided curated capability tag vocabulary in the prompt", async () => {
+    const caller = makeCaller({
+      subTasks: [
+        {
+          description: "implement MCP server",
+          capabilityTags: ["mcp", "execution"],
+          dependencies: [],
+          complexity: makeScore(),
+        },
+      ],
+    });
+
+    const decomposer = new TaskDecomposer(
+      caller,
+      "gpt-4o-mini",
+      () => ["mcp", "execution", "analysis"],
+    );
+    await decomposer.decompose(makeTask("build an mcp integration"), makeScore());
+
+    const prompt = getCallMock(caller).mock.calls[0]?.[0];
+    expect(prompt).toContain("curated set: [mcp, execution, analysis]");
+    expect(prompt).not.toContain("search, codebase, read-only");
+  });
+
   it("normalizes complexity scores and token estimates", async () => {
     const caller = makeCaller({
       subTasks: [

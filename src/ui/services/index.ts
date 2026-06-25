@@ -3,6 +3,8 @@ export { apiClient, isTaskPriority, isTaskStatus } from './client.js';
 export type {
   AgentMutationInput,
   AgentRecord,
+  TagMutationInput,
+  TagRecord,
   ModelMutationInput,
   ModelRecord,
   PaginatedTasks,

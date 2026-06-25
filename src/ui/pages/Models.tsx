@@ -4,7 +4,7 @@ import { Button } from '../components/common/Button.js';
 import { Select } from '../components/forms/Select.js';
 import { ModelForm } from './ModelForm.js';
 import type { Provider } from '../../core/types.js';
-import { apiClient, type ModelMutationInput, type ModelRecord } from '../services/index.js';
+import { apiClient, type ModelMutationInput, type ModelRecord, type TagRecord } from '../services/index.js';
 
 export interface Model extends ModelRecord {}
 
@@ -35,6 +35,7 @@ const formatSourceLabel = (configSource: ModelRecord['configSource']): string =>
 
 const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
   const [models, setModels] = useState<ModelRecord[]>([]);
+  const [tags, setTags] = useState<TagRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterProvider, setFilterProvider] = useState<Provider | 'all'>('all');
@@ -48,8 +49,12 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiClient.listModels();
-      setModels(data);
+      const [modelData, tagData] = await Promise.all([
+        apiClient.listModels(),
+        apiClient.listTags(),
+      ]);
+      setModels(modelData);
+      setTags(tagData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -441,6 +446,7 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
         <ModelForm
           model={editingModel}
           availableModels={models}
+          availableTags={tags}
           onClose={() => {
             setIsFormOpen(false);
             setEditingModel(null);

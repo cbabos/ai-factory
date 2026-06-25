@@ -16,6 +16,7 @@ import {
 import {
   apiClient,
   type AgentRecord,
+  type TagRecord,
   type WorkflowDefinitionRecord,
   type WorkflowDefinitionStatus,
   type WorkflowRunRecord,
@@ -234,6 +235,7 @@ function taskPath(taskId: string): string {
 export default function WorkflowsPage() {
   const navigate = useNavigate();
   const [agents, setAgents] = useState<AgentRecord[]>([]);
+  const [tags, setTags] = useState<TagRecord[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowDefinitionRecord[]>([]);
   const [workflowRuns, setWorkflowRuns] = useState<WorkflowRunRecord[]>([]);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
@@ -251,12 +253,14 @@ export default function WorkflowsPage() {
   const loadWorkflows = useCallback(async () => {
     try {
       setLoading(true);
-      const [agentResponse, workflowResponse, runResponse] = await Promise.all([
+      const [agentResponse, tagResponse, workflowResponse, runResponse] = await Promise.all([
         apiClient.listAgents(),
+        apiClient.listTags(),
         apiClient.listWorkflows(),
         apiClient.listWorkflowRuns(),
       ]);
       setAgents(agentResponse);
+      setTags(tagResponse);
       setWorkflows(workflowResponse);
       setWorkflowRuns(runResponse);
       setError(null);
@@ -834,6 +838,7 @@ export default function WorkflowsPage() {
 
                   <WorkflowStepEditor
                     agents={agents}
+                    availableTags={tags}
                     steps={editor.steps}
                     workflows={workflows}
                     currentWorkflowId={editor.id || selectedWorkflow?.id}

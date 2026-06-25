@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Button } from '../controls/Button.js';
 import { Input } from '../forms/Input.js';
+import { MultiSelect } from '../forms/MultiSelect.js';
 import { Select } from '../forms/Select.js';
 import { TextArea } from '../forms/TextArea.js';
 import type {
   AgentRecord,
+  TagRecord,
   WorkflowDefinitionRecord,
   WorkflowStepRecord,
   WorkflowStepType,
@@ -12,6 +14,7 @@ import type {
 
 interface WorkflowStepEditorProps {
   agents: AgentRecord[];
+  availableTags: TagRecord[];
   steps: WorkflowStepRecord[];
   workflows: WorkflowDefinitionRecord[];
   currentWorkflowId?: string;
@@ -35,19 +38,6 @@ const priorityOptions = [
   { value: 'normal', label: 'Normal' },
   { value: 'batch', label: 'Batch' },
 ];
-
-function commaSeparated(value?: string[]): string {
-  return value?.join(', ') ?? '';
-}
-
-function parseCommaSeparated(value: string): string[] | undefined {
-  const parsed = value
-    .split(',')
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
-
-  return parsed.length > 0 ? parsed : undefined;
-}
 
 function slugifyQuestionId(value: string): string {
   return value
@@ -164,6 +154,7 @@ function renderTypeSpecificFields(
   step: WorkflowStepRecord,
   updateStep: (patch: Partial<WorkflowStepRecord>) => void,
   agents: AgentRecord[],
+  availableTags: TagRecord[],
   workflows: WorkflowDefinitionRecord[],
   allSteps: WorkflowStepRecord[],
   currentWorkflowId?: string,
@@ -205,11 +196,27 @@ function renderTypeSpecificFields(
           onChange={(event) => updateStep({ outputKey: event.target.value })}
           placeholder="requirementsDraft"
         />
-        <Input
+        <MultiSelect
           label="Capability Tags"
-          value={commaSeparated(step.capabilityTags)}
-          onChange={(event) => updateStep({ capabilityTags: parseCommaSeparated(event.target.value) })}
-          placeholder="requirements, writing, analysis"
+          value={step.capabilityTags ?? []}
+          onChange={(values) => updateStep({ capabilityTags: values.length > 0 ? values : undefined })}
+          options={[
+            ...availableTags
+              .filter((tag) => tag.isActive)
+              .map((tag) => ({
+                value: tag.id,
+                label: tag.label,
+              })),
+            ...(step.capabilityTags ?? [])
+              .filter((tagId) => !availableTags.some((tag) => tag.id === tagId))
+              .map((tagId) => ({
+                value: tagId,
+                label: `${tagId} (legacy)`,
+              })),
+          ]}
+          searchable
+          placeholder="Select capability tags..."
+          helpText="Shared capability tags used for routing this step."
         />
         <Select
           label="Priority"
@@ -384,6 +391,7 @@ function renderTypeSpecificFields(
 
 export function WorkflowStepEditor({
   agents,
+  availableTags,
   steps,
   workflows,
   currentWorkflowId,
@@ -688,7 +696,7 @@ export function WorkflowStepEditor({
                   </div>
 
                   <div>
-                    {renderTypeSpecificFields(step, updateStep, agents, workflows, steps, currentWorkflowId)}
+                    {renderTypeSpecificFields(step, updateStep, agents, availableTags, workflows, steps, currentWorkflowId)}
                   </div>
 
                   {availableDependencies.length > 0 ? (

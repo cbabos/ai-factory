@@ -2,10 +2,18 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Panel } from '../components/layout/Panel.js';
 import { Button } from '../components/controls/Button.js';
 import { Alert } from '../components/ui/Alert.js';
+import { Input } from '../components/forms/Input.js';
 import { Select } from '../components/forms/Select.js';
 import { MultiSelect } from '../components/forms/MultiSelect.js';
+import { TextArea } from '../components/forms/TextArea.js';
 import { AgentForm } from './AgentForm.js';
-import { apiClient, type AgentMutationInput, type AgentRecord } from '../services/index.js';
+import {
+  apiClient,
+  type AgentMutationInput,
+  type AgentRecord,
+  type TagMutationInput,
+  type TagRecord,
+} from '../services/index.js';
 
 interface AgentFilter {
   tags: string[];
@@ -53,6 +61,11 @@ export interface AgentsPageProps {
   subtitle?: string;
 }
 
+interface TagDraftState {
+  label: string;
+  description: string;
+}
+
 const formatAvailabilityLabel = (isActive: boolean): string => {
   return isActive ? 'available' : 'inactive';
 };
@@ -68,16 +81,29 @@ const formatMinutes = (timeoutMs: number): string => {
   return `${minutes.toFixed(2).replace(/0$/, '').replace(/\.0$/, '')} min timeout`;
 };
 
+function slugifyTagLabel(label: string): string {
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 const AgentsPage: React.FC<AgentsPageProps> = ({
   title = 'Agents',
   subtitle = 'Manage AI agent configurations',
 }) => {
   const [agents, setAgents] = useState<AgentRecord[]>([]);
+  const [tags, setTags] = useState<TagRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [showTagManager, setShowTagManager] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentRecord | null>(null);
+  const [editingTag, setEditingTag] = useState<TagRecord | null>(null);
   const [deletingAgent, setDeletingAgent] = useState<string | null>(null);
+  const [tagDraft, setTagDraft] = useState<TagDraftState>({ label: '', description: '' });
+  const [tagSearch, setTagSearch] = useState('');
   const [filter, setFilter] = useState<AgentFilter>({
     tags: [],
     complexity: '',
@@ -87,12 +113,16 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
   const loadAgents = useCallback(async () => {
     try {
       setLoading(true);
-      const agentData = await apiClient.listAgents();
+      const [agentData, tagData] = await Promise.all([
+        apiClient.listAgents(),
+        apiClient.listTags(),
+      ]);
       setAgents(agentData);
+      setTags(tagData);
       setError(null);
     } catch (err) {
       console.error('Failed to load agents:', err);
-      setError('Failed to load agents. Please check the API connection.');
+      setError('Failed to load agents and tags. Please check the API connection.');
     } finally {
       setLoading(false);
     }
@@ -200,6 +230,83 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
     setEditingAgent(null);
   };
 
+  const resetTagDraft = () => {
+    setEditingTag(null);
+    setTagDraft({ label: '', description: '' });
+  };
+
+  const handleManageTags = () => {
+    resetTagDraft();
+    setShowTagManager(true);
+  };
+
+  const handleEditTag = (tag: TagRecord) => {
+    setEditingTag(tag);
+    setTagDraft({
+      label: tag.label,
+      description: tag.description ?? '',
+    });
+  };
+
+  const handleTagSubmit = async () => {
+    const label = tagDraft.label.trim();
+    if (!label) {
+      setError('Tag label is required');
+      return;
+    }
+
+    const id = editingTag?.id ?? slugifyTagLabel(label);
+    if (!id) {
+      setError('Tag label must contain letters or numbers');
+      return;
+    }
+
+    const payload: TagMutationInput = {
+      id,
+      label,
+      description: tagDraft.description.trim() || undefined,
+      isActive: editingTag?.isActive ?? true,
+    };
+
+    try {
+      setLoading(true);
+      if (editingTag) {
+        await apiClient.updateTag(editingTag.id, payload);
+      } else {
+        await apiClient.createTag(payload);
+      }
+      await loadAgents();
+      resetTagDraft();
+      setError(null);
+    } catch (err) {
+      console.error('Failed to save tag:', err);
+      setError('Failed to save tag');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTagAvailabilityToggle = async (tag: TagRecord) => {
+    try {
+      setLoading(true);
+      if (tag.isActive) {
+        await apiClient.deleteTag(tag.id);
+      } else {
+        await apiClient.updateTag(tag.id, { isActive: true });
+      }
+      await loadAgents();
+      if (editingTag?.id === tag.id) {
+        resetTagDraft();
+      }
+      setError(null);
+    } catch (err) {
+      console.error('Failed to update tag status:', err);
+      setError('Failed to update tag status');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleFilterChange = (key: keyof AgentFilter, value: string | string[]) => {
     setFilter((prev) => ({
       ...prev,
@@ -207,11 +314,41 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
     }));
   };
 
-  const allTags = useMemo(() => {
-    const tags = new Set<string>();
-    agents.forEach((agent) => agent.tags.forEach((tag) => tags.add(tag)));
-    return Array.from(tags).sort();
-  }, [agents]);
+  const tagOptions = useMemo(() => {
+    const options = tags.map((tag) => ({
+      value: tag.id,
+      label: tag.label,
+    }));
+    const knownIds = new Set(options.map((option) => option.value));
+    const legacyTags = new Set<string>();
+    agents.forEach((agent) => {
+      agent.tags.forEach((tag) => {
+        if (!knownIds.has(tag)) {
+          legacyTags.add(tag);
+        }
+      });
+    });
+
+    return [
+      ...options,
+      ...Array.from(legacyTags)
+        .sort((a, b) => a.localeCompare(b))
+        .map((tag) => ({ value: tag, label: `${tag} (legacy)` })),
+    ];
+  }, [agents, tags]);
+
+  const filteredTags = useMemo(() => {
+    const query = tagSearch.trim().toLowerCase();
+    if (!query) {
+      return tags;
+    }
+
+    return tags.filter((tag) => {
+      const label = tag.label.toLowerCase();
+      const description = (tag.description ?? '').toLowerCase();
+      return label.includes(query) || description.includes(query);
+    });
+  }, [tagSearch, tags]);
 
   if (loading && agents.length === 0) {
     return (
@@ -250,7 +387,7 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
               Filter by Tags
             </label>
             <MultiSelect
-              options={allTags.map((tag) => ({ value: tag, label: tag }))}
+              options={tagOptions}
               value={filter.tags}
               onChange={(values) => handleFilterChange('tags', values)}
               placeholder="Select tags..."
@@ -293,17 +430,28 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
           </div>
 
           <div className="flex items-end">
-            <Button
-              variant="primary"
-              size="md"
-              startIcon="＋"
-              onClick={handleAdd}
-              cyberBorder
-              glow="strong"
-              className="h-[46px]"
-            >
-              Add Agent
-            </Button>
+            <div className="flex gap-3">
+              <Button
+                variant="ghost"
+                size="md"
+                onClick={handleManageTags}
+                cyberBorder
+                className="h-[46px]"
+              >
+                Manage Tags
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                startIcon="＋"
+                onClick={handleAdd}
+                cyberBorder
+                glow="strong"
+                className="h-[46px]"
+              >
+                Add Agent
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -520,9 +668,160 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
       {showForm && (
         <AgentForm
           agent={editingAgent}
+          availableTags={tags.filter((tag) => tag.isActive)}
           onSubmit={handleFormSubmit}
           onCancel={handleFormCancel}
         />
+      )}
+
+      {showTagManager && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-cyber border border-accent-primary bg-panel shadow-[0_0_30px_rgba(0,243,255,0.2)]">
+            <div className="sticky top-0 flex items-start justify-between gap-4 border-b border-accent-primary/20 bg-panel/95 px-6 py-5 backdrop-blur">
+              <div>
+                <h2 className="text-xl font-bold text-accent-primary">Manage Tags</h2>
+                <p className="text-sm text-text-secondary">
+                  Shared routing vocabulary for agents now, with models and workflows next.
+                </p>
+              </div>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setShowTagManager(false)}>
+                Close
+              </Button>
+            </div>
+
+            <div className="grid min-h-0 flex-1 gap-6 overflow-hidden px-6 py-5 lg:grid-cols-[320px_minmax(0,1fr)]">
+              <section className="space-y-4 self-start rounded-cyber border border-accent-primary/20 bg-accent-primary/5 p-4">
+                <div>
+                  <div className="text-sm font-semibold text-text-primary">
+                    {editingTag ? `Edit ${editingTag.id}` : 'Create Tag'}
+                  </div>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    Tag IDs are generated from the label and stay stable for routing.
+                  </p>
+                </div>
+
+                <Input
+                  label="Label"
+                  value={tagDraft.label}
+                  onChange={(event) => setTagDraft((prev) => ({ ...prev, label: event.target.value }))}
+                  placeholder="MCP"
+                  cyberBorder
+                />
+
+                <TextArea
+                  label="Description"
+                  value={tagDraft.description}
+                  onChange={(event) => setTagDraft((prev) => ({ ...prev, description: event.target.value }))}
+                  minRows={3}
+                  maxRows={6}
+                  autoGrow
+                  placeholder="What this tag should mean across the system."
+                  cyberBorder
+                />
+
+                <div className="rounded-cyber border border-accent-primary/20 bg-panel/60 px-3 py-2 text-xs text-text-secondary">
+                  ID preview: <span className="font-mono text-text-primary">{editingTag?.id ?? (slugifyTagLabel(tagDraft.label) || 'tag-id')}</span>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <Button type="button" variant="primary" size="sm" onClick={handleTagSubmit}>
+                    {editingTag ? 'Save Tag' : 'Create Tag'}
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={resetTagDraft}>
+                    Clear
+                  </Button>
+                </div>
+              </section>
+
+              <section className="flex min-h-0 flex-col space-y-3 overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-text-secondary">
+                      Existing Tags
+                    </h3>
+                    <p className="mt-1 text-xs text-text-secondary">
+                      Active tags are selectable. Inactive tags stay visible so we can retire vocabulary safely.
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-1 text-xs text-text-primary">
+                    {tags.filter((tag) => tag.isActive).length} active / {tags.length} total
+                  </span>
+                </div>
+
+                <Input
+                  label="Search Tags"
+                  value={tagSearch}
+                  onChange={(event) => setTagSearch(event.target.value)}
+                  placeholder="Search label or description..."
+                  helpText='Substring match. Example: "cp" finds MCP, cPanel, and descriptions containing cp.'
+                  cyberBorder
+                />
+
+                <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                  {tags.length === 0 ? (
+                    <div className="rounded-cyber border border-dashed border-accent-primary/20 px-4 py-8 text-center text-sm text-text-secondary">
+                      No tags yet. Create the first shared routing tag here.
+                    </div>
+                  ) : filteredTags.length === 0 ? (
+                    <div className="rounded-cyber border border-dashed border-accent-primary/20 px-4 py-8 text-center text-sm text-text-secondary">
+                      No tags match the current search.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {filteredTags.map((tag) => (
+                        <div
+                          key={tag.id}
+                          className={`rounded-cyber border px-4 py-3 ${
+                            tag.isActive
+                              ? 'border-accent-primary/20 bg-panel/70'
+                              : 'border-accent-warning/20 bg-accent-warning/5'
+                          }`}
+                        >
+                          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-sm font-semibold text-text-primary">{tag.label}</span>
+                                <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 font-mono text-[10px] text-text-secondary">
+                                  {tag.id}
+                                </span>
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide ${
+                                    tag.isActive
+                                      ? 'border border-accent-success/20 bg-accent-success/10 text-accent-success'
+                                      : 'border border-accent-warning/20 bg-accent-warning/10 text-accent-warning'
+                                  }`}
+                                >
+                                  {tag.isActive ? 'active' : 'inactive'}
+                                </span>
+                              </div>
+                              <p className="mt-2 text-sm leading-relaxed text-text-secondary">
+                                {tag.description?.trim() || 'No description yet.'}
+                              </p>
+                            </div>
+
+                            <div className="flex shrink-0 gap-2">
+                              <Button type="button" variant="ghost" size="sm" onClick={() => handleEditTag(tag)}>
+                                Edit
+                              </Button>
+                              <Button
+                                type="button"
+                                variant={tag.isActive ? 'ghost' : 'primary'}
+                                size="sm"
+                                onClick={() => handleTagAvailabilityToggle(tag)}
+                              >
+                                {tag.isActive ? 'Retire' : 'Restore'}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
       )}
 
       {deletingAgent && (

@@ -1,5 +1,6 @@
 import type { Task, ComplexityScore, TokenEstimate, ConversationTurn } from "./types.js";
 import type { ITaskDecomposer, ILLMCaller, LLMCallResult, DecompositionResult } from "./interfaces.js";
+import { getDefaultCapabilityTagIds } from "./tag-vocabulary.js";
 
 interface DecomposedSubTask {
   description: string;
@@ -20,10 +21,16 @@ interface DecompositionOutput {
 export class TaskDecomposer implements ITaskDecomposer {
   private llmCaller: ILLMCaller;
   private decomposerModel: string;
+  private capabilityTagsProvider?: () => string[];
 
-  constructor(llmCaller: ILLMCaller, decomposerModel: string) {
+  constructor(
+    llmCaller: ILLMCaller,
+    decomposerModel: string,
+    capabilityTagsProvider?: () => string[],
+  ) {
     this.llmCaller = llmCaller;
     this.decomposerModel = decomposerModel;
+    this.capabilityTagsProvider = capabilityTagsProvider;
   }
 
   async decompose(task: Task, score: ComplexityScore): Promise<DecompositionResult> {
@@ -80,6 +87,7 @@ export class TaskDecomposer implements ITaskDecomposer {
   }
 
   private buildPrompt(task: Task, score: ComplexityScore): string {
+    const availableTags = this.resolveCapabilityTags();
     return `Decompose this complex task into smaller, independently executable sub-tasks. Return valid JSON only.
 
 Original task: ${task.description}
@@ -91,7 +99,8 @@ Constraints: ${JSON.stringify(task.constraints ?? {}, null, 2)}
 
 Rules:
 - Each sub-task must be simple enough for a single-purpose agent.
-- Use capability tags from this set: [search, codebase, read-only, analysis, reasoning, summarization, synthesis, execution, code-generation, write, file-io].
+- Use capability tags from this curated set: [${availableTags.join(", ")}].
+- Prefer the smallest accurate set of tags for each sub-task instead of broad tag stuffing.
 - dependencies are 0-based indices into the subTasks array. Sub-task 2 depends on sub-task 0 means dependencies: [0].
 - Each sub-task gets its own complexity score (must be lower than the parent's ${score.score}).
 - Aim for 2-6 sub-tasks.
@@ -113,6 +122,15 @@ Return exactly:
     }
   ]
 }`;
+  }
+
+  private resolveCapabilityTags(): string[] {
+    const configured = this.capabilityTagsProvider?.() ?? [];
+    const normalized = configured
+      .map((tag) => tag.trim())
+      .filter((tag, index, tags) => tag.length > 0 && tags.indexOf(tag) === index);
+
+    return normalized.length > 0 ? normalized : getDefaultCapabilityTagIds();
   }
 
   private normalizeEstimate(est: TokenEstimate): TokenEstimate {

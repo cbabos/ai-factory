@@ -44,6 +44,23 @@ export interface AgentTokenProfile {
   typical: number;
 }
 
+export interface TagRecord {
+  id: string;
+  label: string;
+  description?: string;
+  version: number;
+  isActive: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface TagMutationInput {
+  id: string;
+  label: string;
+  description?: string;
+  isActive?: boolean;
+}
+
 export interface AgentRecord {
   id: string;
   name: string;

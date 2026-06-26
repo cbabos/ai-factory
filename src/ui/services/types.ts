@@ -213,6 +213,16 @@ export interface ThemeSettings {
   uiLayout?: string;
 }
 
+export interface AppSettings extends ThemeSettings {
+  autoRefreshMs?: number;
+  maxTasksDisplay?: number;
+  decompositionThreshold?: number;
+  budgetDefaultCap?: number;
+  budgetSoftCapRatio?: number;
+  dispatchMaxConcurrency?: number;
+  dispatchDefaultTimeoutMs?: number;
+}
+
 export interface WorkflowStepRecord {
   id: string;
   name: string;

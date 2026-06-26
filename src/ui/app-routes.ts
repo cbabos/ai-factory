@@ -2,6 +2,7 @@ export const appRoutes = {
   homeRedirect: '/agents',
   agents: '/agents',
   models: '/models',
+  settings: '/settings',
   tasks: '/tasks',
   createTask: '/tasks/new',
   taskDetails: '/tasks/:taskId',

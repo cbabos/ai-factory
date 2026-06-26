@@ -272,20 +272,20 @@ export interface TraceSpan {
 // ─── Config ──────────────────────────────────────────────────
 
 export interface FactoryConfig {
-  complexity: {
+  complexity?: {
     decompositionThreshold: number; // score above which to decompose
     estimatorModel?: string;          // optional: default to first available model
   };
-  budget: {
+  budget?: {
     defaultCap: number;
     softCapRatio: number; // e.g. 0.8 → warn at 80%
   };
-  dispatch: {
+  dispatch?: {
     maxConcurrency: number;
     defaultTimeoutMs: number;
   };
-  models: ModelInfo[];
-  agents: AgentManifest[];
+  models?: ModelInfo[];
+  agents?: AgentManifest[];
 }
 
 // ─── Runtime Configuration ───────────────────────────────────────────────────
@@ -296,6 +296,11 @@ export interface Settings {
   ui_layout: string;
   auto_refresh_ms: number;
   max_tasks_display: number;
+  decomposition_threshold: number;
+  budget_default_cap: number;
+  budget_soft_cap_ratio: number;
+  dispatch_max_concurrency: number;
+  dispatch_default_timeout_ms: number;
   createdAt: number;
   updatedAt: number;
 }

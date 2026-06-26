@@ -8,6 +8,7 @@ export type {
   ModelMutationInput,
   ModelRecord,
   PaginatedTasks,
+  AppSettings,
   TaskDetails,
   TaskCreateInput,
   TaskListItem,

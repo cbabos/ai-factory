@@ -25,6 +25,8 @@ export class BudgetTracker extends Configurable<BudgetConfig> implements IBudget
   }
 
   initialize(providers: string[]): void {
+    this.subscription?.unsubscribe();
+    this.states.clear();
     for (const provider of providers) {
       this.states.set(provider, {
         provider: provider as BudgetState["provider"],

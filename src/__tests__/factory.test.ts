@@ -112,6 +112,14 @@ function makeConfig(): FactoryConfig {
   };
 }
 
+function makeConfigWithoutModels(): FactoryConfig {
+  const config = makeConfig();
+  return {
+    ...config,
+    models: [],
+  };
+}
+
 function makeSecrets(): EnvSecretsProvider {
   return {
     provider: "openai",
@@ -120,6 +128,32 @@ function makeSecrets(): EnvSecretsProvider {
 }
 
 describe("AIFactory integration", () => {
+  it("can bootstrap from an empty config when callers are injected", () => {
+    expect(() => new AIFactory({
+      config: {},
+      secrets: makeSecrets(),
+      callers: new Map([["openai", makeFakeCaller()]]),
+      logger: new NoopLogger(),
+    })).not.toThrow();
+  });
+
+  it("can bootstrap callers from env-enabled providers without static models", () => {
+    const secrets = {
+      get: (key: string) => {
+        if (key === "OLLAMA_BASE_URL") {
+          return "https://ollama.example.com/v1";
+        }
+        return undefined;
+      },
+    };
+
+    expect(() => new AIFactory({
+      config: makeConfigWithoutModels(),
+      secrets,
+      logger: new NoopLogger(),
+    })).not.toThrow();
+  });
+
   it("processes a cron signal through the full pipeline", async () => {
     const taskRepository = new InMemoryTaskRepository();
     const factory = new AIFactory({

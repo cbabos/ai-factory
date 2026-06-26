@@ -39,7 +39,7 @@ Current workflow APIs include:
 
 The whole system is wired together by `AIFactory` (`src/factory.ts`).
 
-At startup `main.ts` calls `await factory.initialize()`, which queries each configured LLM caller for its available models. The first discovered oMLX model matching `qwen` is chosen as the default; otherwise the model named in `factory.config.json` is used.
+At startup `main.ts` loads optional bootstrap config defaults, then calls `await factory.initialize()`, which queries each configured LLM caller for its available models. Providers come from environment configuration, and discovered models become the runtime source of truth.
 
 ## Quick start
 
@@ -55,9 +55,9 @@ npm install
 cp .env.example .env
 ```
 
-The default `factory.config.json` uses a local **oMLX** provider on `http://localhost:8000/v1` and tries to discover a model whose name contains `qwen`. Set `OMLX_API_KEY` in `.env` if your local server requires authentication (most local servers accept any non-empty value).
+Providers are enabled from `.env`. Cloud providers are enabled when their API key is present. Local OpenAI-compatible providers can be enabled by setting a non-empty base URL override. For example, set `OMLX_BASE_URL=http://localhost:8000/v1` or `OLLAMA_BASE_URL=http://localhost:11434/v1`. If authentication is required, also set the matching `*_API_KEY`.
 
-To use a cloud provider instead, edit `.env` and `factory.config.json` and add the relevant API keys.
+`factory.config.json` is optional bootstrap seed data. It does not need to exist. Providers come from `.env`, runtime models come from discovery, and orchestration/budget/dispatch settings are persisted in SQLite and editable from the UI.
 
 ### 3. Build
 
@@ -178,7 +178,7 @@ npm run test:watch
 
 ### Useful files
 
-- `factory.config.json` — runtime model/agent configuration.
+- `factory.config.json` — optional bootstrap seed data when you want to override defaults before the DB is populated.
 - `.env` — API keys and transport credentials (gitignored).
 - `doc/architecture.md` — design decisions.
 - `doc/next-steps.md` — roadmap and checklist.

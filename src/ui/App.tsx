@@ -4,6 +4,7 @@ import {
   CreateTaskPage,
   HumanTasksPage,
   ModelsPage,
+  SettingsPage,
   TaskDetailsPage,
   TasksPage,
   WorkflowRunDetailsPage,
@@ -22,6 +23,7 @@ const App = () => {
           <Route path="/" element={<Navigate to={appRoutes.homeRedirect} replace />} />
           <Route path={appRoutes.agents} element={<AgentsPage />} />
           <Route path={appRoutes.models} element={<ModelsPage />} />
+          <Route path={appRoutes.settings} element={<SettingsPage />} />
           <Route path={appRoutes.tasks} element={<TasksPage />} />
           <Route path={appRoutes.createTask} element={<CreateTaskPage />} />
           <Route path={appRoutes.taskDetails} element={<TaskDetailsPage />} />

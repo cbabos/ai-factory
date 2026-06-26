@@ -9,3 +9,4 @@ export { default as TaskDetailsPage } from './TaskDetails.js';
 export { default as WorkflowsPage } from './Workflows.js';
 export { default as HumanTasksPage } from './HumanTasks.js';
 export { default as WorkflowRunDetailsPage } from './WorkflowRunDetails.js';
+export { default as SettingsPage } from './Settings.js';

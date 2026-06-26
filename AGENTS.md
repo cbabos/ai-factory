@@ -29,7 +29,7 @@ npm run typecheck && npm run lint && npm test
   - `strict: true` and `noUncheckedIndexedAccess: true`.
 - **Entrypoints:**
   - Library barrel: `src/index.ts`
-  - Runtime: `src/main.ts` (loads `factory.config.json`)
+  - Runtime: `src/main.ts` (optionally loads bootstrap config defaults)
   - Wiring class: `src/factory.ts` (`AIFactory`)
 
 ## Project Structure
@@ -301,7 +301,7 @@ SLACK_BOT_TOKEN=xoxb-...
 SLACK_SIGNING_SECRET=...
 ```
 
-**Agent Configuration (factory.config.json):**
+**Optional Bootstrap Configuration (factory.config.json):**
 ```json
 {
   "agents": [

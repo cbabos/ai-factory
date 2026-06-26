@@ -74,6 +74,7 @@ import { ApiServer } from "./core/api-server.js";
 import { setSettingsStore as setupSettingsStore } from "./core/api-handlers/settings.js";
 import type { AgentRecord, CreateAgentInput } from "./core/agent-store.js";
 import type { AgentRuntimeSync } from "./core/api-types.js";
+import { normalizeFactoryConfig } from "./core/config-loader.js";
 
 export interface AIFactoryOptions {
   config: FactoryConfig;
@@ -109,7 +110,7 @@ export class AIFactory {
   private humanTaskRepository?: IHumanTaskRepository;
   private artifactRepository?: IWorkflowArtifactRepository;
 
-  private config: FactoryConfig;
+  private config: Required<FactoryConfig>;
   private callers: Map<Provider, ILLMCaller>;
   private breakers = new Map<Provider, CircuitBreaker>();
   private defaultModel: string;
@@ -131,6 +132,8 @@ export class AIFactory {
   private modelStore?: SQLiteModelStore;
   private tagStore?: SQLiteTagStore;
   private baseCatalogModels: ModelInfo[];
+  private currentCatalog: ModelInfo[] = [];
+  private currentProviders: Provider[] = [];
 
   constructor(options: AIFactoryOptions) {
     const {
@@ -148,7 +151,7 @@ export class AIFactory {
       apiServerOptions,
     } = options;
 
-    this.config = config;
+    this.config = normalizeFactoryConfig(config);
     this.logger = logger ?? new ConsoleLogger({ namespace: "AIFactory", level: "info" });
     this.repository = repository as IRepository<{ id: string }> | undefined;
     this.taskRepository = taskRepository;
@@ -167,30 +170,31 @@ export class AIFactory {
       this.tagStore = new SQLiteTagStore("./ai-factory.db");
     }
 
-    const runtimeModels = this.resolveRuntimeModels(config.models);
-    const runtimeAgents = this.resolveRuntimeAgents(config.agents);
+    const runtimeModels = this.resolveRuntimeModels(this.config.models);
+    const runtimeAgents = this.resolveRuntimeAgents(this.config.agents);
     this.baseCatalogModels = runtimeModels;
+    this.currentCatalog = runtimeModels;
 
     this.budgetTracker = new BudgetTracker(this.eventBus);
-    this.budgetTracker.loadConfig({
-      defaultCap: config.budget.defaultCap,
-      softCapRatio: config.budget.softCapRatio,
-    });
-    const providers = [...new Set(runtimeModels.map((m) => m.provider))];
-    this.budgetTracker.initialize(providers);
-
     this.agentRegistry = new AgentRegistry(this.eventBus);
 
     this.metricsCollector = new MetricsCollector(this.eventBus);
 
     this.callers = injectedCallers ?? this.buildCallers(runtimeModels, secrets, this.breakers);
+    const providers = [...new Set([
+      ...runtimeModels.map((m) => m.provider),
+      ...this.callers.keys(),
+    ])];
+    this.currentProviders = providers;
+    this.applyRuntimeSettings();
+
     const defaultCaller = this.callers.values().next().value;
     if (!defaultCaller) {
       throw new Error("No LLM callers configured");
     }
     this.defaultCaller = defaultCaller;
     this.routingCaller = new RoutingLLMCaller(this.callers);
-    this.defaultModel = config.complexity.estimatorModel ?? "";
+    this.defaultModel = this.config.complexity.estimatorModel ?? "";
 
     // `agents` and `dispatcher` are rebuilt after initialize() discovers which
     // models are actually available, so the runtime can fall back to the first
@@ -200,7 +204,7 @@ export class AIFactory {
     this.dispatcher = new Dispatcher(
       this.agentRegistry,
       this.agents,
-      config.dispatch.maxConcurrency,
+      this.config.dispatch.maxConcurrency,
       async (subTask, result) => {
         if (!this.taskRepository || !result.conversation || result.conversation.length === 0) {
           return;
@@ -246,6 +250,8 @@ export class AIFactory {
 
   async initialize(): Promise<void> {
     this.ensureDefaultTagsPersisted();
+    this.ensureDefaultSettingsPersisted();
+    this.applyRuntimeSettings();
 
     const runtimeModels = this.resolveRuntimeModels(this.config.models);
     this.baseCatalogModels = runtimeModels;
@@ -273,6 +279,7 @@ export class AIFactory {
         async (humanTaskId, response) => this.respondToHumanTask(humanTaskId, response),
         async (input) => this.submitApiTask(input),
         (event) => this.syncRuntimeAgents(event),
+        async (settings) => this.applyPersistedSettings(settings),
       );
     }
 
@@ -294,6 +301,7 @@ export class AIFactory {
     }
 
     const mergedCatalog = this.buildMergedCatalog(discovered);
+    this.currentCatalog = mergedCatalog;
     const configuredModel = this.config.complexity.estimatorModel
       ? mergedCatalog.find((m) => m.modelId === this.config.complexity.estimatorModel)
       : undefined;
@@ -308,6 +316,67 @@ export class AIFactory {
 
     this.orchestrator = this.buildOrchestrator(mergedCatalog);
     this.workflowEngine = this.buildWorkflowEngine(mergedCatalog);
+  }
+
+  private ensureDefaultSettingsPersisted(): void {
+    if (!this.settingsStore || this.settingsStore.getSettings()) {
+      return;
+    }
+
+    this.settingsStore.saveSettings({
+      theme: "synthwave84",
+      ui_layout: "dashboard",
+      auto_refresh_ms: 5000,
+      max_tasks_display: 100,
+      decomposition_threshold: this.config.complexity.decompositionThreshold,
+      budget_default_cap: this.config.budget.defaultCap,
+      budget_soft_cap_ratio: this.config.budget.softCapRatio,
+      dispatch_max_concurrency: this.config.dispatch.maxConcurrency,
+      dispatch_default_timeout_ms: this.config.dispatch.defaultTimeoutMs,
+    });
+  }
+
+  private async applyPersistedSettings(settings: import("./core/types.js").Settings): Promise<void> {
+    this.config.complexity.decompositionThreshold = settings.decomposition_threshold;
+    this.config.budget.defaultCap = settings.budget_default_cap;
+    this.config.budget.softCapRatio = settings.budget_soft_cap_ratio;
+    this.config.dispatch.maxConcurrency = settings.dispatch_max_concurrency;
+    this.config.dispatch.defaultTimeoutMs = settings.dispatch_default_timeout_ms;
+    this.applyRuntimeSettings();
+    this.orchestrator = this.buildOrchestrator(this.currentCatalog);
+    this.workflowEngine = this.buildWorkflowEngine(this.currentCatalog);
+  }
+
+  private applyRuntimeSettings(): void {
+    const persisted = this.settingsStore?.getSettings();
+    const defaultCap = persisted?.budget_default_cap ?? this.config.budget.defaultCap;
+    const softCapRatio = persisted?.budget_soft_cap_ratio ?? this.config.budget.softCapRatio;
+    const maxConcurrency = persisted?.dispatch_max_concurrency ?? this.config.dispatch.maxConcurrency;
+    const decompositionThreshold = persisted?.decomposition_threshold ?? this.config.complexity.decompositionThreshold;
+    const defaultTimeoutMs = persisted?.dispatch_default_timeout_ms ?? this.config.dispatch.defaultTimeoutMs;
+
+    this.config.budget.defaultCap = defaultCap;
+    this.config.budget.softCapRatio = softCapRatio;
+    this.config.dispatch.maxConcurrency = maxConcurrency;
+    this.config.dispatch.defaultTimeoutMs = defaultTimeoutMs;
+    this.config.complexity.decompositionThreshold = decompositionThreshold;
+
+    this.budgetTracker.loadConfig({
+      defaultCap,
+      softCapRatio,
+    });
+    this.budgetTracker.initialize(this.currentProviders);
+    this.dispatcher = new Dispatcher(
+      this.agentRegistry,
+      this.agents,
+      maxConcurrency,
+      async (subTask, result) => {
+        if (!this.taskRepository || !result.conversation || result.conversation.length === 0) {
+          return;
+        }
+        await this.taskRepository.appendConversation(subTask.parentTaskId, result.conversation);
+      },
+    );
   }
 
   private syncRuntimeAgents(_event: AgentRuntimeSync): void {
@@ -596,7 +665,7 @@ export class AIFactory {
     breakers: Map<Provider, CircuitBreaker>,
   ): Map<Provider, ILLMCaller> {
     const callers = new Map<Provider, ILLMCaller>();
-    const configuredProviders = new Set(models.map((m) => m.provider));
+    const configuredProviders = this.resolveEnabledProviders(models, secrets);
     const rateLimiter = new RateLimiter({ maxPerSecond: 10, burstSize: 5 });
 
     const wrap = (provider: Provider, caller: ILLMCaller): ILLMCaller => {
@@ -621,11 +690,29 @@ export class AIFactory {
     }
 
     if (configuredProviders.has("ollama")) {
-      callers.set("ollama", wrap("ollama", createOllamaCaller(undefined, secrets.get("OLLAMA_API_KEY") ?? "ollama")));
+      callers.set(
+        "ollama",
+        wrap(
+          "ollama",
+          createOllamaCaller(
+            this.resolveBaseUrl(secrets.get("OLLAMA_BASE_URL"), "http://localhost:11434/v1"),
+            secrets.get("OLLAMA_API_KEY") ?? "ollama",
+          ),
+        ),
+      );
     }
 
     if (configuredProviders.has("omlx")) {
-      callers.set("omlx", wrap("omlx", createOmlxCaller(undefined, secrets.get("OMLX_API_KEY") ?? "omlx")));
+      callers.set(
+        "omlx",
+        wrap(
+          "omlx",
+          createOmlxCaller(
+            this.resolveBaseUrl(secrets.get("OMLX_BASE_URL"), "http://localhost:8000/v1"),
+            secrets.get("OMLX_API_KEY") ?? "omlx",
+          ),
+        ),
+      );
     }
 
     if (configuredProviders.has("mistral")) {
@@ -655,7 +742,50 @@ export class AIFactory {
     return callers;
   }
 
-  private resolveRuntimeAgents(fallbackAgents: FactoryConfig["agents"]): FactoryConfig["agents"] {
+  private resolveEnabledProviders(
+    models: ModelInfo[],
+    secrets: SecretsProvider,
+  ): Set<Provider> {
+    const providers = new Set<Provider>(models.map((model) => model.provider));
+
+    if (this.hasSecret(secrets, "OPENAI_API_KEY")) {
+      providers.add("openai");
+    }
+    if (this.hasSecret(secrets, "ANTHROPIC_API_KEY")) {
+      providers.add("anthropic");
+    }
+    if (this.hasSecret(secrets, "GOOGLE_API_KEY")) {
+      providers.add("google");
+    }
+    if (this.hasSecret(secrets, "MISTRAL_API_KEY")) {
+      providers.add("mistral");
+    }
+    if (this.hasSecret(secrets, "GROQ_API_KEY")) {
+      providers.add("groq");
+    }
+    if (this.hasSecret(secrets, "DEEPSEEK_API_KEY")) {
+      providers.add("deepseek");
+    }
+    if (this.hasSecret(secrets, "OLLAMA_API_KEY") || this.hasSecret(secrets, "OLLAMA_BASE_URL")) {
+      providers.add("ollama");
+    }
+    if (this.hasSecret(secrets, "OMLX_API_KEY") || this.hasSecret(secrets, "OMLX_BASE_URL")) {
+      providers.add("omlx");
+    }
+
+    return providers;
+  }
+
+  private hasSecret(secrets: SecretsProvider, key: string): boolean {
+    const value = secrets.get(key);
+    return typeof value === "string" && value.trim().length > 0;
+  }
+
+  private resolveBaseUrl(value: string | undefined, fallback: string): string {
+    return value && value.trim().length > 0 ? value.trim() : fallback;
+  }
+
+  private resolveRuntimeAgents(fallbackAgents: Required<FactoryConfig>["agents"]): Required<FactoryConfig>["agents"] {
     if (!this.agentStore) {
       return fallbackAgents;
     }
@@ -691,7 +821,7 @@ export class AIFactory {
     return storedAgents.length > 0 ? storedAgents : fallbackAgents;
   }
 
-  private loadRuntimeAgents(runtimeAgents: FactoryConfig["agents"]): void {
+  private loadRuntimeAgents(runtimeAgents: Required<FactoryConfig>["agents"]): void {
     for (const manifest of this.agentRegistry.getAll()) {
       this.agentRegistry.unregister(manifest.id);
     }
@@ -772,12 +902,13 @@ export class AIFactory {
     }
   }
 
-  private resolveRuntimeModels(fallbackModels: FactoryConfig["models"]): ModelInfo[] {
+  private resolveRuntimeModels(fallbackModels: Required<FactoryConfig>["models"]): ModelInfo[] {
+    const normalizedFallbackModels = fallbackModels;
     if (!this.modelStore) {
-      return fallbackModels;
+      return normalizedFallbackModels;
     }
 
-    for (const model of fallbackModels) {
+    for (const model of normalizedFallbackModels) {
       if (this.modelStore.get(model.provider, model.modelId)) {
         continue;
       }
@@ -804,7 +935,7 @@ export class AIFactory {
         capabilities: model.capabilities,
       }));
 
-    return storedModels.length > 0 ? storedModels : fallbackModels;
+    return storedModels.length > 0 ? storedModels : normalizedFallbackModels;
   }
 
   private persistDiscoveredModels(

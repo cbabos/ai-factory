@@ -39,8 +39,10 @@ import {
   deleteTag,
 } from "./api-handlers/tags.js";
 import {
+  getSettings,
   getTheme,
   setTheme,
+  updateSettings,
 } from "./api-handlers/settings.js";
 import {
   listTasks,
@@ -95,6 +97,7 @@ export class ApiServer {
   private humanTaskResponder?: (humanTaskId: string, response: unknown) => Promise<FinalResult>;
   private taskSubmitter?: (input: Record<string, unknown>) => Promise<Task>;
   private agentRuntimeSync?: (event: AgentRuntimeSync) => void;
+  private settingsSync?: (settings: import("./types.js").Settings) => Promise<void>;
 
   private sseClients = new Map<string, { res: Response; interval: NodeJS.Timeout }>();
   private sseInterval?: NodeJS.Timeout;
@@ -183,6 +186,8 @@ export class ApiServer {
   }
 
   private setupSettingsRoutes(router: Router): void {
+    router.get("/settings", this.wrapAsync(getSettings));
+    router.put("/settings", this.wrapAsync(updateSettings));
     router.get("/settings/theme", this.wrapAsync(getTheme));
     router.post("/settings/theme", this.wrapAsync(setTheme));
   }
@@ -299,6 +304,7 @@ export class ApiServer {
     humanTaskResponder?: (humanTaskId: string, response: unknown) => Promise<FinalResult>,
     taskSubmitter?: (input: Record<string, unknown>) => Promise<Task>,
     agentRuntimeSync?: (event: AgentRuntimeSync) => void,
+    settingsSync?: (settings: import("./types.js").Settings) => Promise<void>,
   ): Promise<void> {
     this.agentStore = agentStore;
     this.modelStore = modelStore;
@@ -315,6 +321,7 @@ export class ApiServer {
     this.humanTaskResponder = humanTaskResponder;
     this.taskSubmitter = taskSubmitter;
     this.agentRuntimeSync = agentRuntimeSync;
+    this.settingsSync = settingsSync;
 
     if (this.agentStore) {
       this.app.set("agentStore", this.agentStore);
@@ -351,6 +358,9 @@ export class ApiServer {
     }
     if (this.agentRuntimeSync) {
       this.app.set("agentRuntimeSync", this.agentRuntimeSync);
+    }
+    if (this.settingsSync) {
+      this.app.set("settingsSync", this.settingsSync);
     }
 
     if (this.enableSse && this.agentRegistry) {

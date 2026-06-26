@@ -3,6 +3,7 @@ import { API_ENDPOINTS, API_BASE_URL } from './api.js';
 import type {
   AgentMutationInput,
   AgentRecord,
+  AppSettings,
   TagMutationInput,
   TagRecord,
   ModelMutationInput,
@@ -312,6 +313,20 @@ export const apiClient = {
   async updateThemeSettings(settings: ThemeSettings): Promise<ThemeSettings> {
     const response = await requestJson<ApiEnvelope<ThemeSettings>>(API_ENDPOINTS.settingsTheme, {
       method: 'POST',
+      headers: defaultHeaders,
+      body: JSON.stringify(settings),
+    });
+    return response.data;
+  },
+
+  async getSettings(): Promise<AppSettings> {
+    const response = await requestJson<ApiEnvelope<AppSettings>>(API_ENDPOINTS.settings);
+    return response.data;
+  },
+
+  async updateSettings(settings: AppSettings): Promise<AppSettings> {
+    const response = await requestJson<ApiEnvelope<AppSettings>>(API_ENDPOINTS.settings, {
+      method: 'PUT',
       headers: defaultHeaders,
       body: JSON.stringify(settings),
     });

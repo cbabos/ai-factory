@@ -12,6 +12,7 @@ const navigationItems = [
   { to: '/tasks/new', label: 'New Task' },
   { to: '/agents', label: 'Agents' },
   { to: '/models', label: 'Models' },
+  { to: '/settings', label: 'Settings' },
   { to: '/tasks', label: 'Tasks' },
   { to: '/workflows', label: 'Workflows' },
   { to: '/human-tasks', label: 'Human Tasks' },

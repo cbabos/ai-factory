@@ -73,7 +73,7 @@ import { SQLiteConfigStore } from "./core/sqlite-config-store.js";
 import { ApiServer } from "./core/api-server.js";
 import { setSettingsStore as setupSettingsStore } from "./core/api-handlers/settings.js";
 import type { AgentRecord, CreateAgentInput } from "./core/agent-store.js";
-import type { AgentRuntimeSync } from "./core/api-types.js";
+import type { AgentRuntimeSync, ModelRuntimeSync } from "./core/api-types.js";
 import { normalizeFactoryConfig } from "./core/config-loader.js";
 
 export interface AIFactoryOptions {
@@ -114,6 +114,7 @@ export class AIFactory {
   private callers: Map<Provider, ILLMCaller>;
   private breakers = new Map<Provider, CircuitBreaker>();
   private defaultModel: string;
+  private defaultModelProvider: Provider;
   private defaultCaller: ILLMCaller;
   private routingCaller?: ILLMCaller;
   private dispatcher: Dispatcher;
@@ -194,7 +195,9 @@ export class AIFactory {
     }
     this.defaultCaller = defaultCaller;
     this.routingCaller = new RoutingLLMCaller(this.callers);
-    this.defaultModel = this.config.complexity.estimatorModel ?? "";
+    this.defaultModel = "";
+    this.defaultModelProvider = defaultCaller.provider;
+    this.updateEstimatorSelection(runtimeModels);
 
     // `agents` and `dispatcher` are rebuilt after initialize() discovers which
     // models are actually available, so the runtime can fall back to the first
@@ -279,6 +282,7 @@ export class AIFactory {
         async (humanTaskId, response) => this.respondToHumanTask(humanTaskId, response),
         async (input) => this.submitApiTask(input),
         (event) => this.syncRuntimeAgents(event),
+        async (event) => this.syncRuntimeModels(event),
         async (settings) => this.applyPersistedSettings(settings),
       );
     }
@@ -302,17 +306,7 @@ export class AIFactory {
 
     const mergedCatalog = this.buildMergedCatalog(discovered);
     this.currentCatalog = mergedCatalog;
-    const configuredModel = this.config.complexity.estimatorModel
-      ? mergedCatalog.find((m) => m.modelId === this.config.complexity.estimatorModel)
-      : undefined;
-    const fallbackModel = mergedCatalog.length > 0 ? mergedCatalog[0]! : undefined;
-    const chosenEstimator = configuredModel ?? fallbackModel;
-    if (chosenEstimator) {
-      this.defaultModel = chosenEstimator.modelId;
-      if (!this.config.complexity.estimatorModel) {
-        this.logger.info(`No estimator model configured; using first available model ${chosenEstimator.provider}:${chosenEstimator.modelId}`);
-      }
-    }
+    this.updateEstimatorSelection(mergedCatalog);
 
     this.orchestrator = this.buildOrchestrator(mergedCatalog);
     this.workflowEngine = this.buildWorkflowEngine(mergedCatalog);
@@ -387,6 +381,15 @@ export class AIFactory {
     }
 
     this.loadRuntimeAgents(this.resolveRuntimeAgents(this.config.agents));
+  }
+
+  private async syncRuntimeModels(_event: ModelRuntimeSync): Promise<void> {
+    const runtimeModels = this.resolveRuntimeModels(this.config.models);
+    this.baseCatalogModels = runtimeModels;
+    this.currentCatalog = runtimeModels;
+    this.updateEstimatorSelection(runtimeModels);
+    this.orchestrator = this.buildOrchestrator(runtimeModels);
+    this.workflowEngine = this.buildWorkflowEngine(runtimeModels);
   }
 
   async start(): Promise<void> {
@@ -542,11 +545,17 @@ export class AIFactory {
   }
 
   private buildOrchestrator(catalog: ModelInfo[]): Orchestrator {
-    const estimator = new ComplexityEstimator(this.defaultCaller, this.defaultModel);
+    const orchestrationCaller = this.routingCaller ?? this.defaultCaller;
+    const estimator = new ComplexityEstimator(
+      orchestrationCaller,
+      this.defaultModel,
+      this.defaultModelProvider,
+    );
     const decomposer = new TaskDecomposer(
-      this.defaultCaller,
+      orchestrationCaller,
       this.defaultModel,
       () => this.getRuntimeCapabilityTags(),
+      this.defaultModelProvider,
     );
     const modelSelector = new ModelSelector(catalog);
 
@@ -567,6 +576,26 @@ export class AIFactory {
         await this.taskRepository.appendConversation(taskId, conversation);
       },
     });
+  }
+
+  private updateEstimatorSelection(catalog: ModelInfo[]): void {
+    const configuredModel = this.config.complexity.estimatorModel
+      ? catalog.find((model) => model.modelId === this.config.complexity.estimatorModel)
+      : undefined;
+    const fallbackModel = catalog.length > 0 ? catalog[0] : undefined;
+    const chosenEstimator = configuredModel ?? fallbackModel;
+    if (!chosenEstimator) {
+      return;
+    }
+
+    this.defaultModel = chosenEstimator.modelId;
+    this.defaultModelProvider = chosenEstimator.provider;
+
+    if (!this.config.complexity.estimatorModel) {
+      this.logger.info(
+        `No estimator model configured; using first available model ${chosenEstimator.provider}:${chosenEstimator.modelId}`,
+      );
+    }
   }
 
   private getRuntimeCapabilityTags(): string[] {

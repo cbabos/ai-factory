@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Input } from '../components/forms/Input.js';
 import { MultiSelect } from '../components/forms/MultiSelect.js';
 import { Select } from '../components/forms/Select.js';
@@ -50,26 +50,34 @@ export const ModelForm: React.FC<ModelFormProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const providerOptions = Array.from(new Set(availableModels.map((availableModel) => availableModel.provider)))
-    .sort((left, right) => left.localeCompare(right))
-    .map((provider) => ({
-      value: provider,
-      label: provider.toUpperCase(),
-    }));
+  const providerOptions = useMemo(
+    () =>
+      Array.from(new Set(availableModels.map((availableModel) => availableModel.provider)))
+        .sort((left, right) => left.localeCompare(right))
+        .map((provider) => ({
+          value: provider,
+          label: provider.toUpperCase(),
+        })),
+    [availableModels],
+  );
 
-  const availableModelOptions = Array.from(
-    new Map(
-      providerModels
-        .filter((availableModel) => availableModel.provider === formData.provider)
-        .sort((left, right) => left.modelId.localeCompare(right.modelId))
-        .map((availableModel) => [
-          availableModel.modelId,
-          {
-            value: availableModel.modelId,
-            label: availableModel.modelId,
-          },
-        ]),
-    ).values(),
+  const availableModelOptions = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          providerModels
+            .filter((availableModel) => availableModel.provider === formData.provider)
+            .sort((left, right) => left.modelId.localeCompare(right.modelId))
+            .map((availableModel) => [
+              availableModel.modelId,
+              {
+                value: availableModel.modelId,
+                label: availableModel.modelId,
+              },
+            ]),
+        ).values(),
+      ),
+    [formData.provider, providerModels],
   );
 
   useEffect(() => {
@@ -78,7 +86,7 @@ export const ModelForm: React.FC<ModelFormProps> = ({
 
   useEffect(() => {
     if (model) {
-      setFormData({
+      const nextFormData: ModelFormState = {
         provider: model.provider || 'openai',
         modelId: model.modelId || '',
         maxTokens: model.maxTokens || 4096,
@@ -89,6 +97,24 @@ export const ModelForm: React.FC<ModelFormProps> = ({
         isActive: model.isActive ?? true,
         version: model.version !== undefined ? String(model.version) : undefined,
         configSource: model.configSource || 'static',
+      };
+      setFormData((previous) => {
+        if (
+          previous.provider === nextFormData.provider &&
+          previous.modelId === nextFormData.modelId &&
+          previous.maxTokens === nextFormData.maxTokens &&
+          previous.costPer1kInput === nextFormData.costPer1kInput &&
+          previous.costPer1kOutput === nextFormData.costPer1kOutput &&
+          previous.ownedBy === nextFormData.ownedBy &&
+          previous.isActive === nextFormData.isActive &&
+          previous.version === nextFormData.version &&
+          previous.configSource === nextFormData.configSource &&
+          previous.capabilities.length === nextFormData.capabilities.length &&
+          previous.capabilities.every((capability, index) => capability === nextFormData.capabilities[index])
+        ) {
+          return previous;
+        }
+        return nextFormData;
       });
       return;
     }
@@ -96,7 +122,10 @@ export const ModelForm: React.FC<ModelFormProps> = ({
     if (providerOptions.length > 0) {
       setFormData((previous) => ({
         ...previous,
-        provider: providerOptions[0]!.value as Provider,
+        provider:
+          previous.provider === (providerOptions[0]!.value as Provider)
+            ? previous.provider
+            : (providerOptions[0]!.value as Provider),
       }));
     }
   }, [model, providerOptions]);

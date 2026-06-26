@@ -3,6 +3,7 @@ import type { IModelStore, ModelRecord } from "../model-store.js";
 import type { Provider } from "../types.js";
 import { ApiError } from "../api-types.js";
 import type { ModelCatalog } from "../model-catalog.js";
+import type { ModelRuntimeSync } from "../api-types.js";
 
 // ─── Helper Functions ──────────────────────────────────────────────────────
 
@@ -23,6 +24,11 @@ function _modelRecordToDTO(model: ModelRecord): Record<string, unknown> {
     createdAt: model.createdAt,
     updatedAt: model.updatedAt,
   };
+}
+
+async function _syncRuntime(req: Request, event: ModelRuntimeSync): Promise<void> {
+  const sync = req.app.get("modelRuntimeSync") as ((runtimeEvent: ModelRuntimeSync) => Promise<void>) | undefined;
+  await sync?.(event);
 }
 
 // ─── Model Handlers ────────────────────────────────────────────────────────
@@ -159,6 +165,12 @@ export async function addModel(
       discoveredAt: (body.discoveredAt as number) ?? 0,
     });
 
+    await _syncRuntime(req, {
+      action: "upsert",
+      provider: record.provider as Provider,
+      modelId: record.modelId,
+    });
+
     res.status(201).json({ data: _modelRecordToDTO(record) });
   } catch (error) {
     next(error);
@@ -201,6 +213,12 @@ export async function updateModel(
       isActive: (updates.isActive ?? existing.isActive) as boolean,
     });
 
+    await _syncRuntime(req, {
+      action: "upsert",
+      provider: record.provider as Provider,
+      modelId: record.modelId,
+    });
+
     res.json({ data: _modelRecordToDTO(record) });
   } catch (error) {
     next(error);
@@ -222,6 +240,11 @@ export async function deleteModel(
     }
 
     store.delete(provider as string, modelId as string);
+    await _syncRuntime(req, {
+      action: "delete",
+      provider: provider as Provider,
+      modelId: modelId as string,
+    });
     res.status(204).send();
   } catch (error) {
     next(error);

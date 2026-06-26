@@ -170,6 +170,9 @@ describe("TaskDecomposer", () => {
     const prompt = getCallMock(caller).mock.calls[0]?.[0];
     expect(prompt).toContain("curated set: [mcp, execution, analysis]");
     expect(prompt).not.toContain("search, codebase, read-only");
+    expect(prompt).toContain('The top-level JSON value must be an object, not an array.');
+    expect(prompt).toContain('Do not add extra keys such as "title", "name", "description_code", "notes", or "metadata".');
+    expect(prompt).toContain('Use "confidence", never variants like "conf", "rating", or numeric keys such as "5".');
   });
 
   it("normalizes complexity scores and token estimates", async () => {
@@ -221,6 +224,61 @@ describe("TaskDecomposer", () => {
 
     expect(result.subTasks).toHaveLength(1);
     expect(result.subTasks[0]?.description).toBe("search");
+  });
+
+  it("accepts a top-level array of sub-tasks from the model", async () => {
+    const caller = makeRawCaller(JSON.stringify([
+      {
+        description: "search",
+        capabilityTags: ["search"],
+        dependencies: [],
+        complexity: {
+          score: 3,
+          confidence: 0.9,
+          reasoning: "ok",
+          estimatedTokens: { min: 10, expected: 20, max: 30 },
+        },
+      },
+      {
+        description: "analyze",
+        capabilityTags: ["analysis"],
+        dependencies: [0],
+        complexity: {
+          score: 4,
+          confidence: 0.85,
+          reasoning: "follow-up",
+          estimatedTokens: { min: 20, expected: 40, max: 60 },
+        },
+      },
+    ]));
+
+    const decomposer = new TaskDecomposer(caller, "gpt-4o-mini");
+    const result = await decomposer.decompose(makeTask("find"), makeScore());
+
+    expect(result.subTasks).toHaveLength(2);
+    expect(result.subTasks[0]?.description).toBe("search");
+    expect(result.subTasks[1]?.dependencies).toEqual(["t1-sub-0"]);
+  });
+
+  it("still rejects malformed subtasks after normalizing a top-level array", async () => {
+    const caller = makeRawCaller(JSON.stringify([
+      {
+        description: "search",
+        capabilityTags: ["search"],
+        dependencies: [],
+        complexity: {
+          score: 3,
+          reasoning: "missing confidence",
+          estimatedTokens: { min: 10, expected: 20, max: 30 },
+        },
+      },
+    ]));
+
+    const decomposer = new TaskDecomposer(caller, "gpt-4o-mini");
+
+    await expect(decomposer.decompose(makeTask("find"), makeScore())).rejects.toThrow(
+      "Sub-task 0 complexity.confidence must be a number",
+    );
   });
 
   it("rejects unsupported capability tags", async () => {

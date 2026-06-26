@@ -97,6 +97,10 @@ export class SQLiteModelStore implements IModelStore {
         costPer1kInput = excluded.costPer1kInput,
         costPer1kOutput = excluded.costPer1kOutput,
         capabilities = excluded.capabilities,
+        ownedBy = excluded.ownedBy,
+        isActive = excluded.isActive,
+        discoveredAt = excluded.discoveredAt,
+        configSource = excluded.configSource,
         updatedAt = excluded.updatedAt,
         version = version + 1`,
     );

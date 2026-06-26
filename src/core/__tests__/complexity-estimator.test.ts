@@ -46,6 +46,22 @@ function getCallMock(caller: ILLMCaller): CallMock {
   return caller.call as unknown as CallMock;
 }
 
+function makeRawCaller(content: string): ILLMCaller {
+  return {
+    provider: "openai",
+    call: vi.fn().mockResolvedValue({
+      content,
+      usage: { input: 100, output: 50, total: 150 },
+      model: "gpt-4o-mini",
+      provider: "openai",
+      latencyMs: 1,
+    }) as ILLMCaller["call"],
+    callStructured: vi.fn(),
+    estimateTokens: vi.fn().mockReturnValue(100),
+    listModels: vi.fn(),
+  };
+}
+
 describe("ComplexityEstimator", () => {
   it("returns a normalized complexity score", async () => {
     const caller = makeCaller({
@@ -139,5 +155,35 @@ describe("ComplexityEstimator", () => {
     expect(result.conversation[0]?.role).toBe("system");
     expect(result.conversation[1]?.role).toBe("user");
     expect(result.conversation[2]?.role).toBe("model");
+  });
+
+  it("accepts a single-item array response from the model", async () => {
+    const caller = makeRawCaller(
+      JSON.stringify([
+        {
+          score: 8,
+          confidence: 0.9,
+          reasoning: "full-stack build",
+          estimatedTokens: { min: 1200, expected: 2000, max: 3000 },
+        },
+      ]),
+    );
+    const estimator = new ComplexityEstimator(caller, "gpt-4o-mini");
+
+    const result = await estimator.execute(makeTask("build a webshop"));
+
+    expect(result.score.score).toBe(8);
+    expect(result.score.confidence).toBe(0.9);
+    expect(result.score.reasoning).toBe("full-stack build");
+    expect(result.score.estimatedTokens).toEqual({ min: 1200, expected: 2000, max: 3000 });
+  });
+
+  it("raises a clear error for invalid structured output", async () => {
+    const caller = makeRawCaller(JSON.stringify({ score: 8, confidence: 0.9, reasoning: "missing estimate" }));
+    const estimator = new ComplexityEstimator(caller, "gpt-4o-mini");
+
+    await expect(estimator.execute(makeTask("build a webshop"))).rejects.toThrow(
+      "Estimator returned invalid structure: Estimator output estimatedTokens must be an object",
+    );
   });
 });

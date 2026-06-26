@@ -15,6 +15,7 @@ import {
 } from "../responders/index.js";
 import type { ILLMCaller, LLMCallOptions, LLMCallResult } from "../core/interfaces.js";
 import { NoopLogger } from "../core/logger.js";
+import { ModelSelector } from "../core/model-selector.js";
 import { InMemoryTaskRepository } from "../core/task-repository.js";
 import type { FactoryConfig } from "../core/types.js";
 
@@ -41,6 +42,42 @@ function makeFakeCaller(): ILLMCaller {
     estimateTokens: vi.fn().mockReturnValue(10),
     listModels: vi.fn().mockResolvedValue([
       { provider: "openai", modelId: "gpt-4o-mini", ownedBy: "openai" },
+    ]),
+  };
+}
+
+function makeProviderCaller(
+  provider: "openai" | "ollama" | "omlx",
+  implementation?: (prompt: string, options: LLMCallOptions) => Promise<LLMCallResult>,
+): ILLMCaller {
+  const call = vi.fn<(prompt: string, options: LLMCallOptions) => Promise<LLMCallResult>>().mockImplementation(
+    implementation ?? (async () => ({
+      content: JSON.stringify({
+        score: 3,
+        confidence: 0.9,
+        reasoning: "simple",
+        estimatedTokens: { min: 10, expected: 50, max: 100 },
+      }),
+      usage: { input: 10, output: 10, total: 20 },
+      model: provider === "omlx" ? "gemma-4-12B-it-OptiQ-4bit" : `${provider}-model`,
+      provider,
+      latencyMs: 5,
+    })),
+  );
+
+  return {
+    provider,
+    call,
+    callStructured: vi.fn().mockImplementation(async () => {
+      return JSON.parse((await call("", { model: "", provider })).content);
+    }) as ILLMCaller["callStructured"],
+    estimateTokens: vi.fn().mockReturnValue(10),
+    listModels: vi.fn().mockResolvedValue([
+      {
+        provider,
+        modelId: provider === "omlx" ? "gemma-4-12B-it-OptiQ-4bit" : `${provider}-model`,
+        ownedBy: provider,
+      },
     ]),
   };
 }
@@ -154,6 +191,71 @@ describe("AIFactory integration", () => {
     })).not.toThrow();
   });
 
+  it("keeps estimator model paired with its provider instead of the first caller", async () => {
+    const taskRepository = new InMemoryTaskRepository();
+    const ollamaCaller = makeProviderCaller("ollama");
+    const omlxCaller = makeProviderCaller("omlx");
+
+    const factory = new AIFactory({
+      config: {
+        ...makeConfigWithoutModels(),
+        complexity: {
+          decompositionThreshold: 5,
+          estimatorModel: "gemma-4-12B-it-OptiQ-4bit",
+        },
+        models: [
+          {
+            provider: "ollama",
+            modelId: "ollama-model",
+            maxTokens: 8192,
+            costPer1kInput: 0,
+            costPer1kOutput: 0,
+            capabilities: ["analysis"],
+          },
+          {
+            provider: "omlx",
+            modelId: "gemma-4-12B-it-OptiQ-4bit",
+            maxTokens: 8192,
+            costPer1kInput: 0,
+            costPer1kOutput: 0,
+            capabilities: ["analysis", "execution", "code-generation", "write", "file-io", "read-only", "reasoning", "search", "summarization", "synthesis"],
+          },
+        ],
+      },
+      secrets: makeSecrets(),
+      callers: new Map([
+        ["ollama", ollamaCaller],
+        ["omlx", omlxCaller],
+      ]),
+      logger: new NoopLogger(),
+      taskRepository,
+    });
+
+    factory.registerAdapter(new CronAdapter());
+    factory.registerResponder(new CronResponder());
+    const sensor = new CronSensor(50, "status check");
+    factory.registerSensor(sensor);
+
+    const startPromise = factory.start();
+    await new Promise((r) => setTimeout(r, 250));
+    await factory.stop();
+    await startPromise;
+
+    expect(omlxCaller.call).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        model: "gemma-4-12B-it-OptiQ-4bit",
+        provider: "omlx",
+      }),
+    );
+    expect(ollamaCaller.call).not.toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        model: "gemma-4-12B-it-OptiQ-4bit",
+      }),
+    );
+  });
+
   it("processes a cron signal through the full pipeline", async () => {
     const taskRepository = new InMemoryTaskRepository();
     const factory = new AIFactory({
@@ -186,6 +288,114 @@ describe("AIFactory integration", () => {
     const completedRecord = records.find((record) => record.status === "completed");
     expect(completedRecord).toBeDefined();
     expect((completedRecord?.conversation ?? []).length).toBeGreaterThan(0);
+  });
+
+  it("refreshes the runtime model catalog after model capability updates", async () => {
+    const modelId = `sync-qwen-${Date.now()}`;
+    const factory = new AIFactory({
+      config: {
+        ...makeConfigWithoutModels(),
+        complexity: {
+          decompositionThreshold: 5,
+          estimatorModel: modelId,
+        },
+        models: [
+          {
+            provider: "omlx",
+            modelId,
+            maxTokens: 32768,
+            costPer1kInput: 0.001,
+            costPer1kOutput: 0.001,
+            capabilities: ["code-generation"],
+          },
+        ],
+      },
+      secrets: makeSecrets(),
+      callers: new Map([["omlx", makeProviderCaller("omlx")]]),
+      logger: new NoopLogger(),
+      apiServerOptions: { enableSse: false },
+    });
+
+    const store = (factory as unknown as {
+      modelStore?: {
+        update: (provider: string, modelId: string, updates: {
+          provider: string;
+          modelId: string;
+          maxTokens: number;
+          costPer1kInput: number;
+          costPer1kOutput: number;
+          capabilities: string[];
+          ownedBy?: string;
+          isActive?: boolean;
+        }) => unknown;
+      };
+    }).modelStore;
+    expect(store).toBeDefined();
+
+    store!.update("omlx", modelId, {
+      provider: "omlx",
+      modelId,
+      maxTokens: 32768,
+      costPer1kInput: 0.001,
+      costPer1kOutput: 0.001,
+      capabilities: ["code-generation", "data"],
+      isActive: true,
+    });
+
+    await (factory as unknown as {
+      syncRuntimeModels: (event: { action: "upsert"; provider: "omlx"; modelId: string }) => Promise<void>;
+      currentCatalog: Array<{
+        provider: "omlx";
+        modelId: string;
+        maxTokens: number;
+        costPer1kInput: number;
+        costPer1kOutput: number;
+        capabilities: string[];
+      }>;
+    }).syncRuntimeModels({
+      action: "upsert",
+      provider: "omlx",
+      modelId,
+    });
+
+    const currentCatalog = (factory as unknown as {
+      currentCatalog: Array<{
+        provider: "omlx";
+        modelId: string;
+        maxTokens: number;
+        costPer1kInput: number;
+        costPer1kOutput: number;
+        capabilities: string[];
+      }>;
+    }).currentCatalog;
+    const refreshedModel = currentCatalog.find((model) => model.provider === "omlx" && model.modelId === modelId);
+
+    expect(refreshedModel?.capabilities).toEqual(["code-generation", "data"]);
+
+    const selector = new ModelSelector(currentCatalog);
+    const choice = await selector.select(
+      {
+        id: "sub-1",
+        parentTaskId: "task-1",
+        description: "Define schema",
+        context: {},
+        dependencies: [],
+        capabilityTags: ["code-generation", "data"],
+        complexity: {
+          score: 4,
+          confidence: 0.9,
+          reasoning: "Needs model with both tags",
+          estimatedTokens: { min: 10, expected: 50, max: 100 },
+        },
+        priority: "normal",
+      },
+      [
+        { provider: "omlx", allocated: 10, consumed: 0, remaining: 10, cap: 10, softCap: 8 },
+      ],
+    );
+
+    expect(choice.provider).toBe("omlx");
+    expect(choice.modelId).toBe(modelId);
   });
 
   it("processes a webhook signal via manual injection", async () => {

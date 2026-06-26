@@ -97,6 +97,8 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
     try {
       const nextProvider = modelData.provider ?? editingModel.provider;
       const nextModelId = modelData.modelId ?? editingModel.modelId;
+      const isPersistedModel = models.some((model) => model.id === editingModel.id);
+      const shouldPromoteDiscoveredModel = editingModel.configSource === 'discovered';
 
       if (
         nextProvider !== editingModel.provider ||
@@ -111,10 +113,25 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
           capabilities: modelData.capabilities ?? editingModel.capabilities,
           ownedBy: modelData.ownedBy ?? editingModel.ownedBy,
           isActive: modelData.isActive ?? editingModel.isActive,
-          configSource: modelData.configSource ?? editingModel.configSource,
+          configSource: 'static',
           discoveredAt: modelData.discoveredAt ?? editingModel.discoveredAt,
         });
-        await apiClient.deleteModel(editingModel.provider, editingModel.modelId);
+        if (isPersistedModel) {
+          await apiClient.deleteModel(editingModel.provider, editingModel.modelId);
+        }
+      } else if (!isPersistedModel || shouldPromoteDiscoveredModel) {
+        await apiClient.createModel({
+          provider: nextProvider,
+          modelId: nextModelId,
+          maxTokens: modelData.maxTokens ?? editingModel.maxTokens,
+          costPer1kInput: modelData.costPer1kInput ?? editingModel.costPer1kInput,
+          costPer1kOutput: modelData.costPer1kOutput ?? editingModel.costPer1kOutput,
+          capabilities: modelData.capabilities ?? editingModel.capabilities,
+          ownedBy: modelData.ownedBy ?? editingModel.ownedBy,
+          isActive: modelData.isActive ?? editingModel.isActive,
+          configSource: 'static',
+          discoveredAt: modelData.discoveredAt ?? editingModel.discoveredAt,
+        });
       } else {
         await apiClient.updateModel(editingModel.provider, editingModel.modelId, modelData);
       }
@@ -137,7 +154,9 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
     }
   };
 
-  const filteredModels = models.filter((model) => {
+  const managedModelIds = new Set(models.map((model) => model.id));
+
+  const filteredModels = availableModels.filter((model) => {
     if (filterProvider !== 'all' && model.provider !== filterProvider) {
       return false;
     }
@@ -149,7 +168,7 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
     return true;
   });
 
-  const providerOptions = Array.from(new Set(models.map((model) => model.provider)))
+  const providerOptions = Array.from(new Set(availableModels.map((model) => model.provider)))
     .sort((left, right) => left.localeCompare(right))
     .map((provider) => ({
       value: provider,
@@ -292,7 +311,7 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
         <div className="flex flex-col items-center justify-center py-16 text-text-secondary">
           <div className="text-6xl mb-4 opacity-20">🤖</div>
           <p className="text-lg mb-2">No models found</p>
-          <p className="text-sm mb-6">Add a model to get started</p>
+          <p className="text-sm mb-6">No discovered or managed models are currently available</p>
           <Button variant="cyber" onClick={handleAddNew} startIcon="＋">
             Add First Model
           </Button>
@@ -306,7 +325,9 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
           </div>
 
           <div className="divide-y divide-accent-primary/10">
-            {sortedModels.map((model) => (
+            {sortedModels.map((model) => {
+              const isPersistedModel = managedModelIds.has(model.id);
+              return (
               <div
                 key={model.id}
                 className="px-5 py-4 hover:bg-accent-primary/5 transition-colors"
@@ -333,6 +354,11 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
                         <span className="rounded-full border border-accent-secondary/20 bg-accent-secondary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-accent-secondary">
                           {formatSourceLabel(model.configSource)}
                         </span>
+                        {!isPersistedModel ? (
+                          <span className="rounded-full border border-warning/20 bg-warning/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-warning">
+                            discovery only
+                          </span>
+                        ) : null}
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide ${
                             model.isActive
@@ -386,6 +412,7 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
                     <Button
                       variant="danger"
                       size="sm"
+                      disabled={!isPersistedModel}
                       onClick={() => handleDeleteClick(model)}
                     >
                       Delete
@@ -430,6 +457,11 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
                       <span className="rounded-full border border-accent-secondary/20 bg-accent-secondary/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-accent-secondary">
                         {formatSourceLabel(model.configSource)}
                       </span>
+                      {!isPersistedModel ? (
+                        <span className="rounded-full border border-warning/20 bg-warning/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-warning">
+                          discovery only
+                        </span>
+                      ) : null}
                   </div>
 
                   <div>
@@ -470,6 +502,7 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
                       variant="danger"
                       size="sm"
                       className="flex-1"
+                      disabled={!isPersistedModel}
                       onClick={() => handleDeleteClick(model)}
                     >
                       Delete
@@ -477,7 +510,8 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
                   </div>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
       )}

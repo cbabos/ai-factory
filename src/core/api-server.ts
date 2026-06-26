@@ -14,7 +14,7 @@ import type {
   IWorkflowRepository,
   IWorkflowRunRepository,
 } from "./workflow-repository.js";
-import type { SSEEvent, ApiServerOptions, AgentRuntimeSync } from "./api-types.js";
+import type { SSEEvent, ApiServerOptions, AgentRuntimeSync, ModelRuntimeSync } from "./api-types.js";
 import { ApiError, isApiError } from "./api-types.js";
 import type { FactoryEvent } from "./types.js";
 import {
@@ -97,6 +97,7 @@ export class ApiServer {
   private humanTaskResponder?: (humanTaskId: string, response: unknown) => Promise<FinalResult>;
   private taskSubmitter?: (input: Record<string, unknown>) => Promise<Task>;
   private agentRuntimeSync?: (event: AgentRuntimeSync) => void;
+  private modelRuntimeSync?: (event: ModelRuntimeSync) => Promise<void>;
   private settingsSync?: (settings: import("./types.js").Settings) => Promise<void>;
 
   private sseClients = new Map<string, { res: Response; interval: NodeJS.Timeout }>();
@@ -304,6 +305,7 @@ export class ApiServer {
     humanTaskResponder?: (humanTaskId: string, response: unknown) => Promise<FinalResult>,
     taskSubmitter?: (input: Record<string, unknown>) => Promise<Task>,
     agentRuntimeSync?: (event: AgentRuntimeSync) => void,
+    modelRuntimeSync?: (event: ModelRuntimeSync) => Promise<void>,
     settingsSync?: (settings: import("./types.js").Settings) => Promise<void>,
   ): Promise<void> {
     this.agentStore = agentStore;
@@ -321,6 +323,7 @@ export class ApiServer {
     this.humanTaskResponder = humanTaskResponder;
     this.taskSubmitter = taskSubmitter;
     this.agentRuntimeSync = agentRuntimeSync;
+    this.modelRuntimeSync = modelRuntimeSync;
     this.settingsSync = settingsSync;
 
     if (this.agentStore) {
@@ -358,6 +361,9 @@ export class ApiServer {
     }
     if (this.agentRuntimeSync) {
       this.app.set("agentRuntimeSync", this.agentRuntimeSync);
+    }
+    if (this.modelRuntimeSync) {
+      this.app.set("modelRuntimeSync", this.modelRuntimeSync);
     }
     if (this.settingsSync) {
       this.app.set("settingsSync", this.settingsSync);

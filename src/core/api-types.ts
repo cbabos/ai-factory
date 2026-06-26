@@ -98,6 +98,18 @@ export type AgentRuntimeSync =
       agentId: string;
     };
 
+export type ModelRuntimeSync =
+  | {
+      action: "upsert";
+      provider: Provider;
+      modelId: string;
+    }
+  | {
+      action: "delete";
+      provider: Provider;
+      modelId: string;
+    };
+
 export type SSEEventType =
   | TaskCreatedEvent
   | TaskCompletedEvent

@@ -23,15 +23,18 @@ export class TaskDecomposer implements ITaskDecomposer {
   private llmCaller: ILLMCaller;
   private decomposerModel: string;
   private capabilityTagsProvider?: () => string[];
+  private decomposerProvider: string;
 
   constructor(
     llmCaller: ILLMCaller,
     decomposerModel: string,
     capabilityTagsProvider?: () => string[],
+    decomposerProvider?: string,
   ) {
     this.llmCaller = llmCaller;
     this.decomposerModel = decomposerModel;
     this.capabilityTagsProvider = capabilityTagsProvider;
+    this.decomposerProvider = decomposerProvider ?? llmCaller.provider;
   }
 
   async decompose(task: Task, score: ComplexityScore): Promise<DecompositionResult> {
@@ -74,7 +77,7 @@ export class TaskDecomposer implements ITaskDecomposer {
     for (let attempt = 1; attempt <= TaskDecomposer.MAX_PARSE_ATTEMPTS; attempt += 1) {
       const result = await this.llmCaller.call(prompt, {
         model: this.decomposerModel,
-        provider: this.llmCaller.provider,
+        provider: this.decomposerProvider,
         systemPrompt: SYSTEM_PROMPT,
         temperature: 0.2,
         maxTokens: 2000,
@@ -122,7 +125,7 @@ export class TaskDecomposer implements ITaskDecomposer {
     conversation.push({ role: "user", content: prompt, timestamp: Date.now(), metadata: { phase: "decomposition-repair" } });
     const result = await this.llmCaller.call(prompt, {
       model: this.decomposerModel,
-      provider: this.llmCaller.provider,
+      provider: this.decomposerProvider,
       systemPrompt: REPAIR_SYSTEM_PROMPT,
       temperature: 0,
       maxTokens: 2000,
@@ -139,15 +142,16 @@ export class TaskDecomposer implements ITaskDecomposer {
 
   private parseStructured(content: string): DecompositionOutput {
     const sanitizedContent = this.stripJsonFence(content);
-    let parsed: DecompositionOutput;
+    let parsed: unknown;
     try {
-      parsed = JSON.parse(sanitizedContent) as DecompositionOutput;
+      parsed = JSON.parse(sanitizedContent) as unknown;
     } catch (err) {
       throw new Error(`Decomposer returned invalid JSON: ${err instanceof Error ? err.message : String(err)}. Content: ${content.slice(0, 500)}`);
     }
     try {
-      this.validateStructured(parsed);
-      return parsed;
+      const normalized = this.normalizeStructured(parsed);
+      this.validateStructured(normalized);
+      return normalized;
     } catch (err) {
       throw new Error(`Decomposer returned invalid structure: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -155,7 +159,9 @@ export class TaskDecomposer implements ITaskDecomposer {
 
   private buildPrompt(task: Task, score: ComplexityScore): string {
     const availableTags = this.resolveCapabilityTags();
-    return `Decompose this complex task into smaller, independently executable sub-tasks. Return valid JSON only.
+    return `Decompose this complex task into smaller, independently executable sub-tasks.
+
+You must follow the output schema exactly. Return valid JSON only.
 
 Original task: ${task.description}
 Parent complexity score: ${score.score}/10
@@ -172,6 +178,111 @@ Rules:
 - Each sub-task gets its own complexity score (must be lower than the parent's ${score.score}).
 - Aim for 2-6 sub-tasks.
 - estimatedTokens: { min, max, expected }
+- The top-level JSON value must be an object, not an array.
+- The top-level object must contain exactly one key: "subTasks".
+- "subTasks" must be an array of objects.
+- Each sub-task object must contain exactly these keys:
+  "description", "capabilityTags", "dependencies", "complexity"
+- Do not add extra keys such as "title", "name", "description_code", "notes", or "metadata".
+- "description" must be a non-empty string.
+- "capabilityTags" must be an array using only values from the curated set above.
+- "dependencies" must be an array of integers referencing earlier sub-task indices only.
+- "complexity" must contain exactly these keys:
+  "score", "confidence", "reasoning", "estimatedTokens"
+- Do not rename fields. Use "confidence", never variants like "conf", "rating", or numeric keys such as "5".
+- "score" must be a number.
+- "confidence" must be a number between 0 and 1.
+- "reasoning" must be a string.
+- "estimatedTokens" must contain exactly these numeric keys:
+  "min", "max", "expected"
+- Do not wrap the response in markdown fences.
+- Do not include commentary, explanations, prose, headings, or text before or after the JSON.
+- If you are uncertain, still output the exact schema with best-effort values instead of inventing new fields.
+
+Valid examples:
+Example 1:
+{
+  "subTasks": [
+    {
+      "description": "Inspect the existing repository structure and identify the files relevant to authentication.",
+      "capabilityTags": ["codebase", "analysis", "read-only"],
+      "dependencies": [],
+      "complexity": {
+        "score": 3,
+        "confidence": 0.92,
+        "reasoning": "This is a small inspection task with no code changes.",
+        "estimatedTokens": { "min": 120, "max": 300, "expected": 180 }
+      }
+    }
+  ]
+}
+
+Example 2:
+{
+  "subTasks": [
+    {
+      "description": "Create the project directory and initialize the Node.js application with the required dependencies.",
+      "capabilityTags": ["file-io", "execution", "code-generation"],
+      "dependencies": [],
+      "complexity": {
+        "score": 4,
+        "confidence": 0.88,
+        "reasoning": "Project bootstrap is straightforward but touches filesystem and package setup.",
+        "estimatedTokens": { "min": 180, "max": 420, "expected": 280 }
+      }
+    },
+    {
+      "description": "Define the initial database schema and data models for products, users, and orders.",
+      "capabilityTags": ["code-generation", "data", "analysis"],
+      "dependencies": [0],
+      "complexity": {
+        "score": 5,
+        "confidence": 0.86,
+        "reasoning": "Schema design depends on project setup and requires moderate reasoning.",
+        "estimatedTokens": { "min": 220, "max": 520, "expected": 360 }
+      }
+    }
+  ]
+}
+
+Example 3:
+{
+  "subTasks": [
+    {
+      "description": "Review the failing test output and identify the component causing the regression.",
+      "capabilityTags": ["analysis", "reasoning", "read-only"],
+      "dependencies": [],
+      "complexity": {
+        "score": 3,
+        "confidence": 0.91,
+        "reasoning": "This is a bounded debugging analysis task.",
+        "estimatedTokens": { "min": 100, "max": 260, "expected": 160 }
+      }
+    },
+    {
+      "description": "Implement the code fix in the affected component and update any related logic.",
+      "capabilityTags": ["code-generation", "write", "execution"],
+      "dependencies": [0],
+      "complexity": {
+        "score": 4,
+        "confidence": 0.84,
+        "reasoning": "The fix requires code changes informed by the prior diagnosis.",
+        "estimatedTokens": { "min": 160, "max": 380, "expected": 250 }
+      }
+    },
+    {
+      "description": "Run the relevant tests and summarize whether the regression is resolved.",
+      "capabilityTags": ["execution", "analysis", "summarization"],
+      "dependencies": [1],
+      "complexity": {
+        "score": 3,
+        "confidence": 0.9,
+        "reasoning": "Verification is procedural and depends on the implemented fix.",
+        "estimatedTokens": { "min": 90, "max": 220, "expected": 140 }
+      }
+    }
+  ]
+}
 
 Return exactly:
 {
@@ -238,6 +349,13 @@ ${content}`;
     return err.message.startsWith("Decomposer returned invalid JSON:");
   }
 
+  private normalizeStructured(parsed: unknown): DecompositionOutput {
+    if (Array.isArray(parsed)) {
+      return { subTasks: parsed as DecomposedSubTask[] };
+    }
+    return parsed as DecompositionOutput;
+  }
+
   private validateStructured(parsed: DecompositionOutput): void {
     if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.subTasks)) {
       throw new Error("Decomposer output must be an object with a subTasks array");
@@ -247,11 +365,59 @@ ${content}`;
     const subTaskCount = parsed.subTasks.length;
 
     parsed.subTasks.forEach((subTask, index) => {
+      if (typeof subTask.description !== "string" || subTask.description.trim().length === 0) {
+        throw new Error(`Sub-task ${index} description must be a non-empty string`);
+      }
+      if (!Array.isArray(subTask.capabilityTags)) {
+        throw new Error(`Sub-task ${index} capabilityTags must be an array`);
+      }
+      if (!Array.isArray(subTask.dependencies)) {
+        throw new Error(`Sub-task ${index} dependencies must be an array`);
+      }
+      if (!subTask.complexity || typeof subTask.complexity !== "object") {
+        throw new Error(`Sub-task ${index} complexity must be an object`);
+      }
+
       const invalidTags = subTask.capabilityTags.filter((tag) => !allowedTags.has(tag));
       if (invalidTags.length > 0) {
         throw new Error(
           `Sub-task ${index} uses unsupported capability tags: ${invalidTags.join(", ")}. Allowed tags: ${Array.from(allowedTags).join(", ")}`,
         );
+      }
+
+      if (typeof subTask.complexity.score !== "number" || Number.isNaN(subTask.complexity.score)) {
+        throw new Error(`Sub-task ${index} complexity.score must be a number`);
+      }
+      if (typeof subTask.complexity.confidence !== "number" || Number.isNaN(subTask.complexity.confidence)) {
+        throw new Error(`Sub-task ${index} complexity.confidence must be a number`);
+      }
+      if (typeof subTask.complexity.reasoning !== "string") {
+        throw new Error(`Sub-task ${index} complexity.reasoning must be a string`);
+      }
+      if (
+        !subTask.complexity.estimatedTokens
+        || typeof subTask.complexity.estimatedTokens !== "object"
+        || Array.isArray(subTask.complexity.estimatedTokens)
+      ) {
+        throw new Error(`Sub-task ${index} complexity.estimatedTokens must be an object`);
+      }
+      if (
+        typeof subTask.complexity.estimatedTokens.min !== "number"
+        || Number.isNaN(subTask.complexity.estimatedTokens.min)
+      ) {
+        throw new Error(`Sub-task ${index} complexity.estimatedTokens.min must be a number`);
+      }
+      if (
+        typeof subTask.complexity.estimatedTokens.expected !== "number"
+        || Number.isNaN(subTask.complexity.estimatedTokens.expected)
+      ) {
+        throw new Error(`Sub-task ${index} complexity.estimatedTokens.expected must be a number`);
+      }
+      if (
+        typeof subTask.complexity.estimatedTokens.max !== "number"
+        || Number.isNaN(subTask.complexity.estimatedTokens.max)
+      ) {
+        throw new Error(`Sub-task ${index} complexity.estimatedTokens.max must be a number`);
       }
 
       subTask.dependencies.forEach((dependency) => {
@@ -278,5 +444,5 @@ ${content}`;
   }
 }
 
-const SYSTEM_PROMPT = `You are a task decomposition specialist. Break complex tasks into the smallest possible independent sub-tasks. Each sub-task should be simple enough for a single-purpose agent. Prefer more, simpler sub-tasks over fewer, complex ones. Always respond with valid JSON only.`;
+const SYSTEM_PROMPT = `You are a task decomposition specialist. Break complex tasks into the smallest possible independent sub-tasks. Each sub-task should be simple enough for a single-purpose agent. Prefer more, simpler sub-tasks over fewer, complex ones. You must follow the requested schema exactly. Return a single valid JSON object only, with no markdown fences, no commentary, no extra keys, and no alternative field names.`;
 const REPAIR_SYSTEM_PROMPT = `You repair malformed JSON. Return valid JSON only, preserve the intended structure and values, and never include markdown fences or commentary.`;

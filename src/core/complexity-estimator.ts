@@ -17,11 +17,13 @@ export class ComplexityEstimator
 
   private llmCaller: ILLMCaller;
   private estimatorModel: string;
+  private estimatorProvider: string;
 
-  constructor(llmCaller: ILLMCaller, estimatorModel: string) {
+  constructor(llmCaller: ILLMCaller, estimatorModel: string, estimatorProvider?: string) {
     super();
     this.llmCaller = llmCaller;
     this.estimatorModel = estimatorModel;
+    this.estimatorProvider = estimatorProvider ?? llmCaller.provider;
   }
 
   async execute(task: Task): Promise<EstimationResult> {
@@ -34,7 +36,7 @@ export class ComplexityEstimator
     try {
       const result: LLMCallResult = await this.llmCaller.call(prompt, {
         model: this.estimatorModel,
-        provider: this.llmCaller.provider,
+        provider: this.estimatorProvider,
         systemPrompt: SYSTEM_PROMPT,
         temperature: 0.1,
         maxTokens: 600,
@@ -69,10 +71,17 @@ export class ComplexityEstimator
   }
 
   private parseStructured(content: string): ComplexityOutput {
+    const sanitizedContent = this.stripJsonFence(content);
+    let parsed: unknown;
     try {
-      return JSON.parse(content) as ComplexityOutput;
+      parsed = JSON.parse(sanitizedContent) as unknown;
     } catch (err) {
       throw new Error(`Estimator returned invalid JSON: ${err instanceof Error ? err.message : String(err)}. Content: ${content.slice(0, 500)}`);
+    }
+    try {
+      return this.validateStructured(parsed);
+    } catch (err) {
+      throw new Error(`Estimator returned invalid structure: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -109,6 +118,65 @@ Guidelines for score:
     const expected = Math.max(min, Math.round(est.expected));
     const max = Math.max(expected, Math.round(est.max));
     return { min, max, expected };
+  }
+
+  private stripJsonFence(content: string): string {
+    const trimmed = content.trim();
+    const fencedMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+    return fencedMatch?.[1] ?? trimmed;
+  }
+
+  private validateStructured(parsed: unknown): ComplexityOutput {
+    const normalized = this.unwrapSingleEstimate(parsed);
+    if (!normalized || typeof normalized !== "object" || Array.isArray(normalized)) {
+      throw new Error("Estimator output must be an object");
+    }
+
+    const candidate = normalized as Record<string, unknown>;
+    if (typeof candidate.score !== "number" || Number.isNaN(candidate.score)) {
+      throw new Error("Estimator output score must be a number");
+    }
+    if (typeof candidate.confidence !== "number" || Number.isNaN(candidate.confidence)) {
+      throw new Error("Estimator output confidence must be a number");
+    }
+    if (typeof candidate.reasoning !== "string") {
+      throw new Error("Estimator output reasoning must be a string");
+    }
+    if (!candidate.estimatedTokens || typeof candidate.estimatedTokens !== "object" || Array.isArray(candidate.estimatedTokens)) {
+      throw new Error("Estimator output estimatedTokens must be an object");
+    }
+
+    const estimatedTokens = candidate.estimatedTokens as Record<string, unknown>;
+    if (typeof estimatedTokens.min !== "number" || Number.isNaN(estimatedTokens.min)) {
+      throw new Error("Estimator output estimatedTokens.min must be a number");
+    }
+    if (typeof estimatedTokens.expected !== "number" || Number.isNaN(estimatedTokens.expected)) {
+      throw new Error("Estimator output estimatedTokens.expected must be a number");
+    }
+    if (typeof estimatedTokens.max !== "number" || Number.isNaN(estimatedTokens.max)) {
+      throw new Error("Estimator output estimatedTokens.max must be a number");
+    }
+
+    return {
+      score: candidate.score,
+      confidence: candidate.confidence,
+      reasoning: candidate.reasoning,
+      estimatedTokens: {
+        min: estimatedTokens.min,
+        expected: estimatedTokens.expected,
+        max: estimatedTokens.max,
+      },
+    };
+  }
+
+  private unwrapSingleEstimate(parsed: unknown): unknown {
+    if (!Array.isArray(parsed)) {
+      return parsed;
+    }
+    if (parsed.length !== 1) {
+      throw new Error("Estimator output array must contain exactly one item");
+    }
+    return parsed[0];
   }
 }
 

@@ -120,6 +120,9 @@ export interface ModelChoice {
   modelId: string;
   estimatedTokens: TokenEstimate;
   estimatedCost: number;
+  costPer1kInput: number;
+  costPer1kOutput: number;
+  maxTokens?: number;
   fallback?: ModelChoice;
 }
 
@@ -180,16 +183,16 @@ export interface AgentManifest {
   id: string;
   tags: CapabilityTag[];
   complexityRange: [number, number];
-  tokenProfile: TokenProfile;
-  preferredModels?: string[];
   timeoutMs: number;
   maxRetries: number;
 }
 
-export interface TokenProfile {
-  min: number;
-  max: number;
-  typical: number;
+export interface RankedAgentCandidate {
+  manifest: AgentManifest;
+  matchedTaskTags: CapabilityTag[];
+  missingTaskTags: CapabilityTag[];
+  extraAgentTags: CapabilityTag[];
+  score: number;
 }
 
 // ─── Delivery ────────────────────────────────────────────────

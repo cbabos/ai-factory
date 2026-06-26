@@ -66,12 +66,18 @@ export class ModelSelector implements IModelSelector {
       modelId: primary.model.modelId,
       estimatedTokens: subTask.complexity.estimatedTokens,
       estimatedCost: primary.estimatedCost,
+      costPer1kInput: primary.model.costPer1kInput,
+      costPer1kOutput: primary.model.costPer1kOutput,
+      maxTokens: primary.model.maxTokens,
       fallback: fallback
         ? {
             provider: fallback.model.provider,
             modelId: fallback.model.modelId,
             estimatedTokens: subTask.complexity.estimatedTokens,
             estimatedCost: fallback.estimatedCost,
+            costPer1kInput: fallback.model.costPer1kInput,
+            costPer1kOutput: fallback.model.costPer1kOutput,
+            maxTokens: fallback.model.maxTokens,
           }
         : undefined,
     };

@@ -39,6 +39,8 @@ function makeResult(
       modelId,
       estimatedTokens: { min: 0, max: 0, expected: 0 },
       estimatedCost: 0,
+      costPer1kInput: 0,
+      costPer1kOutput: 0,
     },
     latencyMs: 10,
     retries: 0,

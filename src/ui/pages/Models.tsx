@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Panel } from '../components/layout/Panel.js';
 import { Button } from '../components/common/Button.js';
 import { Select } from '../components/forms/Select.js';
+import { MultiSelect } from '../components/forms/MultiSelect.js';
 import { ModelForm } from './ModelForm.js';
 import type { Provider } from '../../core/types.js';
 import { apiClient, type ModelMutationInput, type ModelRecord, type TagRecord } from '../services/index.js';
@@ -39,6 +40,7 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterProvider, setFilterProvider] = useState<Provider | 'all'>('all');
+  const [filterTags, setFilterTags] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<'cost' | 'tokens' | 'name'>('cost');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -132,9 +134,17 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
     }
   };
 
-  const filteredModels = models.filter((model) =>
-    filterProvider === 'all' ? true : model.provider === filterProvider
-  );
+  const filteredModels = models.filter((model) => {
+    if (filterProvider !== 'all' && model.provider !== filterProvider) {
+      return false;
+    }
+
+    if (filterTags.length > 0 && !filterTags.some((tag) => model.capabilities.includes(tag))) {
+      return false;
+    }
+
+    return true;
+  });
 
   const providerOptions = Array.from(new Set(models.map((model) => model.provider)))
     .sort((left, right) => left.localeCompare(right))
@@ -192,6 +202,33 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
                 ...providerOptions,
               ]}
               onChange={(e) => setFilterProvider(e.target.value as Provider | 'all')}
+            />
+          </div>
+          <div className="w-full sm:w-72">
+            <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-text-primary">
+              Filter by Tags
+            </label>
+            <MultiSelect
+              options={[
+                ...tags
+                  .filter((tag) => tag.isActive)
+                  .map((tag) => ({
+                    value: tag.id,
+                    label: tag.label,
+                  })),
+                ...filterTags
+                  .filter((tagId) => !tags.some((tag) => tag.id === tagId))
+                  .map((tagId) => ({
+                    value: tagId,
+                    label: `${tagId} (legacy)`,
+                  })),
+              ]}
+              value={filterTags}
+              onChange={setFilterTags}
+              placeholder="Select tags..."
+              searchable
+              cyberBorder
+              size="md"
             />
           </div>
           <div className="w-full sm:w-48">

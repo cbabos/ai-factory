@@ -395,15 +395,12 @@ export class WorkflowEngine extends PipelineStep<Task, FinalResult> {
     }
 
     const capabilityTags = step.capabilityTags ?? agent.manifest.tags;
-    const estimatedTokens: TokenEstimate = {
-      min: agent.manifest.tokenProfile.min,
-      expected: agent.manifest.tokenProfile.typical,
-      max: agent.manifest.tokenProfile.max,
-    };
+    const renderedInstruction = this.renderInstruction(step.instruction, task, run.context);
+    const estimatedTokens = this.estimateWorkflowStepTokens(renderedInstruction, task, run.context);
     const subTask: SubTask = {
       id: `${task.id}-${effectiveStepId}`,
       parentTaskId: task.id,
-      description: this.renderInstruction(step.instruction, task, run.context),
+      description: renderedInstruction,
       context: {
         ...task.context,
         workflowRunId: run.id,
@@ -426,6 +423,19 @@ export class WorkflowEngine extends PipelineStep<Task, FinalResult> {
       ...subTask,
       assignedModel: this.filterModelChoice(assignedModel, step.preferredProviders),
     });
+  }
+
+  private estimateWorkflowStepTokens(
+    instruction: string,
+    task: Task,
+    workflowContext: Record<string, unknown>,
+  ): TokenEstimate {
+    const serializedContext = JSON.stringify(workflowContext);
+    const promptSize = instruction.length + task.description.length + serializedContext.length;
+    const expected = Math.max(200, Math.ceil(promptSize / 4));
+    const min = Math.max(100, Math.floor(expected * 0.6));
+    const max = Math.max(expected + 400, Math.ceil(expected * 2.5));
+    return { min, expected, max };
   }
 
   private filterModelChoice(model: ModelChoice, preferredProviders?: string[]): ModelChoice {

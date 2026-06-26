@@ -54,6 +54,8 @@ function makeModelChoice(modelId: string): ModelChoice {
     modelId,
     estimatedTokens: { min: 10, expected: 50, max: 100 },
     estimatedCost: 0.001,
+    costPer1kInput: 0.01,
+    costPer1kOutput: 0.02,
   };
 }
 
@@ -137,6 +139,8 @@ function makeDeps(overrides: {
         modelId: "gpt-4o-mini",
         estimatedTokens: st.complexity.estimatedTokens,
         estimatedCost: 0.001,
+        costPer1kInput: 0.01,
+        costPer1kOutput: 0.02,
       };
       return choice;
     }),

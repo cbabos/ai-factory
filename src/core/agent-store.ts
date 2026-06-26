@@ -6,8 +6,6 @@ export interface AgentRecord {
   tags: string[];
   complexityMin: number;
   complexityMax: number;
-  tokenProfile: { min: number; max: number; typical: number };
-  preferredModels?: string[];
   timeoutMs: number;
   maxRetries: number;
   version: number;
@@ -25,10 +23,6 @@ export interface CreateAgentInput {
   tags: string[];
   complexityMin: number;
   complexityMax: number;
-  tokenProfileMin: number;
-  tokenProfileMax: number;
-  tokenProfileTypical: number;
-  preferredModels?: string[];
   timeoutMs?: number;
   maxRetries?: number;
   configSource?: "static" | "custom";
@@ -37,15 +31,10 @@ export interface CreateAgentInput {
 }
 
 export interface UpdateAgentInput {
-  id: string;
   name?: string;
   tags?: string[];
   complexityMin?: number;
   complexityMax?: number;
-  tokenProfileMin?: number;
-  tokenProfileMax?: number;
-  tokenProfileTypical?: number;
-  preferredModels?: string[];
   timeoutMs?: number;
   maxRetries?: number;
   description?: string;
@@ -75,7 +64,7 @@ export class SQLiteAgentStore implements IAgentStore {
 
   constructor(path: string) {
     this.db = new DatabaseSync(path);
-    
+
     this.db.exec(
       `CREATE TABLE IF NOT EXISTS agents (
         id TEXT PRIMARY KEY,
@@ -83,10 +72,28 @@ export class SQLiteAgentStore implements IAgentStore {
         tags TEXT NOT NULL,
         complexityMin INTEGER NOT NULL,
         complexityMax INTEGER NOT NULL,
-        tokenProfileMin INTEGER NOT NULL,
-        tokenProfileMax INTEGER NOT NULL,
-        tokenProfileTypical INTEGER NOT NULL,
-        preferredModels TEXT,
+        timeoutMs INTEGER NOT NULL DEFAULT 30000,
+        maxRetries INTEGER NOT NULL DEFAULT 2,
+        version INTEGER NOT NULL DEFAULT 1,
+        isActive INTEGER NOT NULL DEFAULT 1,
+        configSource TEXT DEFAULT 'static',
+        description TEXT,
+        metadata TEXT,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL,
+        UNIQUE(name)
+      )`,
+    );
+    this.migrateLegacyAgentSchema();
+    this.ensureConfigHistoryTable();
+
+    this.db.exec(
+      `CREATE TABLE IF NOT EXISTS agents (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        tags TEXT NOT NULL,
+        complexityMin INTEGER NOT NULL,
+        complexityMax INTEGER NOT NULL,
         timeoutMs INTEGER NOT NULL DEFAULT 30000,
         maxRetries INTEGER NOT NULL DEFAULT 2,
         version INTEGER NOT NULL DEFAULT 1,
@@ -104,10 +111,9 @@ export class SQLiteAgentStore implements IAgentStore {
     this.getAllStmt = this.db.prepare("SELECT * FROM agents ORDER BY updatedAt DESC");
     this.saveStmt = this.db.prepare(
       `INSERT INTO agents (
-        id, name, tags, complexityMin, complexityMax, tokenProfileMin, tokenProfileMax, tokenProfileTypical,
-        preferredModels, timeoutMs, maxRetries, version, isActive, configSource, description, metadata,
+        id, name, tags, complexityMin, complexityMax, timeoutMs, maxRetries, version, isActive, configSource, description, metadata,
         createdAt, updatedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         tags = excluded.tags,
         timeoutMs = excluded.timeoutMs,
@@ -121,10 +127,6 @@ export class SQLiteAgentStore implements IAgentStore {
         tags = ?,
         complexityMin = ?,
         complexityMax = ?,
-        tokenProfileMin = ?,
-        tokenProfileMax = ?,
-        tokenProfileTypical = ?,
-        preferredModels = ?,
         timeoutMs = ?,
         maxRetries = ?,
         description = ?,
@@ -144,7 +146,6 @@ export class SQLiteAgentStore implements IAgentStore {
   save(agent: CreateAgentInput): AgentRecord {
     const now = Date.now();
     const tagsJson = JSON.stringify(agent.tags);
-    const preferredModelsJson = agent.preferredModels ? JSON.stringify(agent.preferredModels) : JSON.stringify([]);
     const metadataJson = agent.metadata ? JSON.stringify(agent.metadata) : JSON.stringify({});
     const description = agent.description ?? "";
     const configSource = agent.configSource ?? "static";
@@ -155,10 +156,6 @@ export class SQLiteAgentStore implements IAgentStore {
       tagsJson,
       agent.complexityMin,
       agent.complexityMax,
-      agent.tokenProfileMin,
-      agent.tokenProfileMax,
-      agent.tokenProfileTypical,
-      preferredModelsJson,
       agent.timeoutMs ?? 30000,
       agent.maxRetries ?? 2,
       1,
@@ -178,10 +175,6 @@ export class SQLiteAgentStore implements IAgentStore {
       tags: tagsJson,
       complexityMin: agent.complexityMin,
       complexityMax: agent.complexityMax,
-      tokenProfileMin: agent.tokenProfileMin,
-      tokenProfileMax: agent.tokenProfileMax,
-      tokenProfileTypical: agent.tokenProfileTypical,
-      preferredModels: preferredModelsJson,
       timeoutMs: agent.timeoutMs ?? 30000,
       maxRetries: agent.maxRetries ?? 2,
       version: 1,
@@ -213,7 +206,6 @@ export class SQLiteAgentStore implements IAgentStore {
 
     const now = Date.now();
     const tagsJson = JSON.stringify(updates.tags ?? existing.tags);
-    const preferredModelsJson = JSON.stringify(updates.preferredModels ?? existing.preferredModels ?? []);
     const metadataJson = JSON.stringify(updates.metadata ?? existing.metadata ?? {});
 
     this.updateStmt.run(
@@ -221,10 +213,6 @@ export class SQLiteAgentStore implements IAgentStore {
       tagsJson,
       updates.complexityMin ?? existing.complexityMin,
       updates.complexityMax ?? existing.complexityMax,
-      updates.tokenProfileMin ?? existing.tokenProfile.min,
-      updates.tokenProfileMax ?? existing.tokenProfile.max,
-      updates.tokenProfileTypical ?? existing.tokenProfile.typical,
-      preferredModelsJson,
       updates.timeoutMs ?? existing.timeoutMs,
       updates.maxRetries ?? existing.maxRetries,
       (updates.description ?? existing.description) ?? "",
@@ -239,7 +227,6 @@ export class SQLiteAgentStore implements IAgentStore {
       ...existing,
       ...updates,
       tags: updates.tags ?? existing.tags,
-      preferredModels: updates.preferredModels ?? existing.preferredModels,
       metadata: updates.metadata ?? existing.metadata,
       updatedAt: now,
       version: existing.version + 1,
@@ -286,6 +273,118 @@ export class SQLiteAgentStore implements IAgentStore {
     this.db.close();
   }
 
+  private ensureConfigHistoryTable(): void {
+    const historyTable = this.db.prepare(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'config_history'",
+    ).get() as { sql?: string } | undefined;
+
+    if (!historyTable?.sql) {
+      this.createConfigHistoryTable();
+      return;
+    }
+
+    if (historyTable.sql.includes("'agent'")) {
+      return;
+    }
+
+    this.db.exec("ALTER TABLE config_history RENAME TO config_history_legacy");
+    this.createConfigHistoryTable();
+    this.db.exec(
+      `INSERT INTO config_history (
+        id, entityType, entityId, operation, oldData, newData, versionBefore,
+        versionAfter, changedBy, changedAt, description
+      )
+      SELECT
+        id, entityType, entityId, operation, oldData, newData, versionBefore,
+        versionAfter, changedBy, changedAt, description
+      FROM config_history_legacy`,
+    );
+    this.db.exec("DROP TABLE config_history_legacy");
+  }
+
+  private createConfigHistoryTable(): void {
+    this.db.exec(
+      `CREATE TABLE IF NOT EXISTS config_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entityType TEXT NOT NULL CHECK (entityType IN ('agent', 'model', 'tag')),
+        entityId TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        oldData TEXT,
+        newData TEXT,
+        versionBefore INTEGER NOT NULL,
+        versionAfter INTEGER NOT NULL,
+        changedBy TEXT NOT NULL,
+        changedAt INTEGER NOT NULL,
+        description TEXT
+      )`,
+    );
+  }
+
+  private migrateLegacyAgentSchema(): void {
+    const columns = this.db.prepare("PRAGMA table_info(agents)").all() as Array<{ name: string }>;
+    if (columns.length === 0) {
+      return;
+    }
+
+    const columnNames = new Set(columns.map((column) => column.name));
+    const hasLegacyColumns = columnNames.has("tokenProfileMin")
+      || columnNames.has("tokenProfileMax")
+      || columnNames.has("tokenProfileTypical")
+      || columnNames.has("preferredModels");
+
+    if (!hasLegacyColumns) {
+      return;
+    }
+
+    const dependentViews = this.db.prepare(
+      `SELECT name, sql
+       FROM sqlite_master
+       WHERE type = 'view'
+         AND sql IS NOT NULL
+         AND sql LIKE '%agents%'`,
+    ).all() as Array<{ name: string; sql: string }>;
+
+    for (const view of dependentViews) {
+      this.db.exec(`DROP VIEW IF EXISTS "${view.name}"`);
+    }
+
+    this.db.exec(
+      `CREATE TABLE agents_migrated (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        tags TEXT NOT NULL,
+        complexityMin INTEGER NOT NULL,
+        complexityMax INTEGER NOT NULL,
+        timeoutMs INTEGER NOT NULL DEFAULT 30000,
+        maxRetries INTEGER NOT NULL DEFAULT 2,
+        version INTEGER NOT NULL DEFAULT 1,
+        isActive INTEGER NOT NULL DEFAULT 1,
+        configSource TEXT DEFAULT 'static',
+        description TEXT,
+        metadata TEXT,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL,
+        UNIQUE(name)
+      )`,
+    );
+    this.db.exec(
+      `INSERT INTO agents_migrated (
+        id, name, tags, complexityMin, complexityMax, timeoutMs, maxRetries, version, isActive,
+        configSource, description, metadata, createdAt, updatedAt
+      )
+      SELECT
+        id, name, tags, complexityMin, complexityMax, timeoutMs, maxRetries, version, isActive,
+        configSource, description, metadata, createdAt, updatedAt
+      FROM agents`,
+    );
+    this.db.exec("DROP TABLE agents");
+    this.db.exec("ALTER TABLE agents_migrated RENAME TO agents");
+
+    for (const view of dependentViews) {
+      this.db.exec(view.sql);
+    }
+  }
+
   private createRecordFromRow(row: Record<string, unknown>): AgentRecord {
     return {
       id: row.id as string,
@@ -293,12 +392,6 @@ export class SQLiteAgentStore implements IAgentStore {
       tags: JSON.parse(row.tags as string) as string[],
       complexityMin: row.complexityMin as number,
       complexityMax: row.complexityMax as number,
-      tokenProfile: {
-        min: row.tokenProfileMin as number,
-        max: row.tokenProfileMax as number,
-        typical: row.tokenProfileTypical as number,
-      },
-      preferredModels: row.preferredModels ? (JSON.parse(row.preferredModels as string) as string[]) : [],
       timeoutMs: row.timeoutMs as number,
       maxRetries: row.maxRetries as number,
       version: row.version as number,

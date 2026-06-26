@@ -76,6 +76,8 @@ export class Dispatcher
                 modelId: "unknown",
                 estimatedTokens: { min: 0, max: 0, expected: 0 },
                 estimatedCost: 0,
+                costPer1kInput: 0,
+                costPer1kOutput: 0,
               },
               latencyMs: 0,
               retries: 0,
@@ -108,19 +110,10 @@ export class Dispatcher
   }
 
   private findAgent(subTask: SubTask): IAgent | undefined {
-    const candidates = this.registry.findByTags(subTask.capabilityTags);
-    const byComplexity = candidates.filter((m) => {
-      const [min, max] = m.complexityRange;
-      return subTask.complexity.score >= min && subTask.complexity.score <= max;
-    });
+    const rankedCandidates = this.registry.rankByTags(subTask.capabilityTags);
 
-    for (const manifest of byComplexity) {
-      const agent = this.agents.get(manifest.id);
-      if (agent) return agent;
-    }
-
-    for (const manifest of candidates) {
-      const agent = this.agents.get(manifest.id);
+    for (const candidate of rankedCandidates) {
+      const agent = this.agents.get(candidate.manifest.id);
       if (agent) return agent;
     }
 
@@ -128,11 +121,17 @@ export class Dispatcher
   }
 
   private noAgentResult(subTask: SubTask): TaskResult {
+    const rankedCandidates = this.registry.rankByTags(subTask.capabilityTags).slice(0, 3);
+    const rankedSummary = rankedCandidates.length > 0
+      ? ` Top candidates: ${rankedCandidates.map((candidate) =>
+        `${candidate.manifest.id} (score ${candidate.score}, missing ${candidate.missingTaskTags.length}, extra ${candidate.extraAgentTags.length})`).join("; ")}`
+      : "";
+
     return {
       subTaskId: subTask.id,
       output: null,
       success: false,
-      error: `No agent found for tags: ${subTask.capabilityTags.join(", ")}`,
+      error: `No agent found for tags: ${subTask.capabilityTags.join(", ")}.${rankedSummary}`,
       actualTokens: { input: 0, output: 0, total: 0 },
       actualCost: 0,
       modelUsed: subTask.assignedModel ?? {
@@ -140,9 +139,28 @@ export class Dispatcher
         modelId: "unknown",
         estimatedTokens: { min: 0, max: 0, expected: 0 },
         estimatedCost: 0,
+        costPer1kInput: 0,
+        costPer1kOutput: 0,
       },
       latencyMs: 0,
       retries: 0,
+      conversation: [
+        {
+          role: "tool",
+          content: JSON.stringify({
+            requestedTags: subTask.capabilityTags,
+            rankedCandidates: rankedCandidates.map((candidate) => ({
+              agentId: candidate.manifest.id,
+              score: candidate.score,
+              matchedTaskTags: candidate.matchedTaskTags,
+              missingTaskTags: candidate.missingTaskTags,
+              extraAgentTags: candidate.extraAgentTags,
+            })),
+          }),
+          timestamp: Date.now(),
+          metadata: { phase: "dispatch-routing" },
+        },
+      ],
     };
   }
 }

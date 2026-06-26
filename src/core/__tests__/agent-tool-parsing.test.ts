@@ -15,8 +15,6 @@ class TestAgent extends Agent {
     id: "test-agent",
     tags: ["test"],
     complexityRange: [1, 10] as [number, number],
-    tokenProfile: { min: 10, max: 1000, typical: 100 },
-    preferredModels: [],
     timeoutMs: 5000,
     maxRetries: 0,
   };
@@ -76,6 +74,8 @@ function makeSubTask(): SubTask {
       modelId: "qwen",
       estimatedTokens: { min: 10, max: 100, expected: 50 },
       estimatedCost: 0,
+      costPer1kInput: 0,
+      costPer1kOutput: 0,
     },
   };
 }

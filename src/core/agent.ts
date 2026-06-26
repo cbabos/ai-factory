@@ -107,7 +107,7 @@ export abstract class Agent
         error: "No model assigned to sub-task",
         actualTokens: { input: 0, output: 0, total: 0 },
         actualCost: 0,
-        modelUsed: { provider: "openai", modelId: "unknown", estimatedTokens: { min: 0, max: 0, expected: 0 }, estimatedCost: 0 },
+        modelUsed: { provider: "openai", modelId: "unknown", estimatedTokens: { min: 0, max: 0, expected: 0 }, estimatedCost: 0, costPer1kInput: 0, costPer1kOutput: 0 },
         latencyMs: 0,
         retries: 0,
       };
@@ -143,7 +143,6 @@ export abstract class Agent
                 model: currentModel.modelId,
                 provider: currentModel.provider,
                 systemPrompt,
-                maxTokens: this.manifest.tokenProfile.max,
                 timeoutMs: this.manifest.timeoutMs,
               };
 
@@ -285,6 +284,9 @@ export abstract class Agent
   protected abstract parseOutput(raw: string, subTask: SubTask): unknown;
 
   protected calculateCost(usage: TokenUsage, model: ModelChoice): number {
-    return model.estimatedCost;
+    return (
+      (usage.input / 1000) * model.costPer1kInput +
+      (usage.output / 1000) * model.costPer1kOutput
+    );
   }
 }

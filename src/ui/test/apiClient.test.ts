@@ -117,7 +117,7 @@ describe('apiClient', () => {
     expect(result.workflowVersion).toBe(1);
   });
 
-  it('sends nested token profiles unchanged for agent updates', async () => {
+  it('sends the streamlined agent payload for updates', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
@@ -129,8 +129,6 @@ describe('apiClient', () => {
           tags: ['analysis'],
           complexityMin: 1,
           complexityMax: 5,
-          tokenProfile: { min: 10, max: 20, typical: 15 },
-          preferredModels: ['gpt-4o-mini'],
           timeoutMs: 1000,
           maxRetries: 2,
           version: 2,
@@ -148,8 +146,6 @@ describe('apiClient', () => {
       tags: ['analysis'],
       complexityMin: 1,
       complexityMax: 5,
-      tokenProfile: { min: 10, max: 20, typical: 15 },
-      preferredModels: ['gpt-4o-mini'],
       timeoutMs: 1000,
       maxRetries: 2,
       configSource: 'custom',
@@ -166,8 +162,6 @@ describe('apiClient', () => {
           tags: ['analysis'],
           complexityMin: 1,
           complexityMax: 5,
-          tokenProfile: { min: 10, max: 20, typical: 15 },
-          preferredModels: ['gpt-4o-mini'],
           timeoutMs: 1000,
           maxRetries: 2,
           configSource: 'custom',

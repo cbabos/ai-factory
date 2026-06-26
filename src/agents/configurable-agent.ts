@@ -1,5 +1,4 @@
 import { Agent } from "../core/agent.js";
-import type { CreateAgentInput } from "../core/agent-store.js";
 import type { IAgent, ILLMCaller } from "../core/interfaces.js";
 import type { AgentManifest, SubTask } from "../core/types.js";
 import type { IToolRegistry } from "../tools/interfaces.js";
@@ -11,6 +10,18 @@ interface ConfigurableAgentMetadata {
   notes?: unknown;
   promptTemplate?: unknown;
   outputMode?: unknown;
+}
+
+interface ConfigurableAgentInput {
+  id: string;
+  name: string;
+  tags: string[];
+  complexityMin: number;
+  complexityMax: number;
+  timeoutMs?: number;
+  maxRetries?: number;
+  description?: string;
+  metadata?: Record<string, unknown>;
 }
 
 function getString(value: unknown): string | undefined {
@@ -45,7 +56,7 @@ export class ConfigurableAgent extends Agent implements IAgent {
   private readonly metadata: ConfigurableAgentMetadata;
 
   constructor(
-    input: CreateAgentInput & { description?: string; metadata?: Record<string, unknown> },
+    input: ConfigurableAgentInput,
     llmCaller: ILLMCaller,
     tools?: IToolRegistry,
   ) {
@@ -59,12 +70,6 @@ export class ConfigurableAgent extends Agent implements IAgent {
       id: input.id,
       tags: input.tags,
       complexityRange: [input.complexityMin, input.complexityMax],
-      tokenProfile: {
-        min: input.tokenProfileMin,
-        typical: input.tokenProfileTypical,
-        max: input.tokenProfileMax,
-      },
-      preferredModels: input.preferredModels,
       timeoutMs: input.timeoutMs ?? 30000,
       maxRetries: input.maxRetries ?? 2,
     };

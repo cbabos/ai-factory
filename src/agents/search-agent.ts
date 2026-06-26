@@ -9,7 +9,6 @@ export class SearchAgent extends Agent implements IAgent {
     id: "search-agent",
     tags: ["search", "codebase", "read-only"],
     complexityRange: [1, 4],
-    tokenProfile: { min: 200, max: 2000, typical: 800 },
     timeoutMs: 30000,
     maxRetries: 2,
   };

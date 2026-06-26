@@ -38,12 +38,6 @@ export interface WorkflowArtifactRecord {
   metadata?: Record<string, unknown>;
 }
 
-export interface AgentTokenProfile {
-  min: number;
-  max: number;
-  typical: number;
-}
-
 export interface TagRecord {
   id: string;
   label: string;
@@ -67,8 +61,6 @@ export interface AgentRecord {
   tags: string[];
   complexityMin: number;
   complexityMax: number;
-  tokenProfile: AgentTokenProfile;
-  preferredModels?: string[];
   timeoutMs: number;
   maxRetries: number;
   version: number;
@@ -86,8 +78,6 @@ export interface AgentMutationInput {
   tags: string[];
   complexityMin: number;
   complexityMax: number;
-  tokenProfile: AgentTokenProfile;
-  preferredModels?: string[];
   timeoutMs: number;
   maxRetries: number;
   isActive?: boolean;

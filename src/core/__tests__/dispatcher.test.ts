@@ -10,8 +10,6 @@ function makeManifest(id: string, tags: string[], complexityRange: [number, numb
     id,
     tags,
     complexityRange,
-    tokenProfile: { min: 100, max: 1000, typical: 500 },
-    preferredModels: ["gpt-4o-mini"],
     timeoutMs: 30000,
     maxRetries: 2,
   };
@@ -62,6 +60,8 @@ describe("Dispatcher", () => {
         modelId: "gpt-4o-mini",
         estimatedTokens: { min: 0, max: 0, expected: 0 },
         estimatedCost: 0,
+        costPer1kInput: 0,
+        costPer1kOutput: 0,
       },
       latencyMs: 5,
       retries: 0,
@@ -89,6 +89,8 @@ describe("Dispatcher", () => {
         modelId: "x",
         estimatedTokens: { min: 0, max: 0, expected: 0 },
         estimatedCost: 0,
+        costPer1kInput: 0,
+        costPer1kOutput: 0,
       },
       latencyMs: 1,
       retries: 0,
@@ -119,6 +121,43 @@ describe("Dispatcher", () => {
     expect(results[0]?.error).toMatch(/No agent found/);
   });
 
+  it("prefers the highest-ranked tag match instead of complexity range", async () => {
+    const registry = new AgentRegistry(new EventBus());
+    const result: TaskResult = {
+      subTaskId: "s1",
+      output: "done",
+      success: true,
+      actualTokens: { input: 10, output: 10, total: 20 },
+      actualCost: 0.001,
+      modelUsed: {
+        provider: "openai",
+        modelId: "gpt-4o-mini",
+        estimatedTokens: { min: 0, max: 0, expected: 0 },
+        estimatedCost: 0,
+        costPer1kInput: 0,
+        costPer1kOutput: 0,
+      },
+      latencyMs: 5,
+      retries: 0,
+    };
+    const specialist = makeAgent("specialist", ["mcp"], [5, 10], result);
+    const broad = makeAgent("broad", ["mcp", "analysis", "execution"], [1, 10], result);
+    registry.register(broad.manifest);
+    registry.register(specialist.manifest);
+    const dispatcher = new Dispatcher(
+      registry,
+      new Map([
+        ["specialist", specialist],
+        ["broad", broad],
+      ]),
+      5,
+    );
+
+    await dispatcher.execute([makeSubTask("s1", ["mcp"], [], 3)]);
+    expect(specialist.execute).toHaveBeenCalled();
+    expect(broad.execute).not.toHaveBeenCalled();
+  });
+
   it("handles dependency cycles", async () => {
     const registry = new AgentRegistry(new EventBus());
     const dispatcher = new Dispatcher(registry, new Map(), 5);
@@ -144,6 +183,8 @@ describe("Dispatcher", () => {
         modelId: "x",
         estimatedTokens: { min: 0, max: 0, expected: 0 },
         estimatedCost: 0,
+        costPer1kInput: 0,
+        costPer1kOutput: 0,
       },
       latencyMs: 1,
       retries: 0,

@@ -9,6 +9,7 @@ import type {
   FactoryEvent,
   FinalResult,
   ModelChoice,
+  RankedAgentCandidate,
   RawSignal,
   Signal,
   SubTask,
@@ -124,6 +125,7 @@ export interface IAgentRegistry {
   unregister(agentId: string): void;
   get(agentId: string): AgentManifest | undefined;
   findByTags(tags: string[]): AgentManifest[];
+  rankByTags(tags: string[]): RankedAgentCandidate[];
   findByComplexity(score: number): AgentManifest[];
   getAll(): AgentManifest[];
 }

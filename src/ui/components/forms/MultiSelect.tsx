@@ -2,6 +2,7 @@ import React, {
   MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
 } from 'react';
@@ -115,6 +116,13 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
   const [search, setSearch] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listboxId = useId();
+
+  useEffect(() => {
+    if (isOpen && searchable) {
+      inputRef.current?.focus();
+    }
+  }, [isOpen, searchable]);
 
   // Handle click outside to close dropdown
   useEffect(() => {
@@ -124,6 +132,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
         !dropdownRef.current.contains(event.target as Node)
       ) {
         setIsOpen(false);
+        setSearch('');
       }
     }
 
@@ -185,14 +194,20 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
     sm: {
       container: 'text-sm',
       content: 'px-3 py-2 min-h-[38px]',
+      option: 'px-3 py-2 text-xs',
+      search: 'px-3 py-2 text-xs',
     },
     md: {
       container: 'text-sm',
       content: 'px-4 py-3 min-h-[46px]',
+      option: 'px-3 py-2.5 text-sm',
+      search: 'px-3 py-2.5 text-sm',
     },
     lg: {
       container: 'text-base',
       content: 'px-4 py-4 min-h-[54px]',
+      option: 'px-4 py-3 text-sm',
+      search: 'px-4 py-3 text-sm',
     },
   };
 
@@ -205,7 +220,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
 
   return (
     <div
-      className="flex flex-col gap-1.5"
+      className="relative flex flex-col gap-1.5"
       ref={dropdownRef}
     >
       {label && (
@@ -227,7 +242,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
         role="button"
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        aria-controls="multiselect-dropdown"
+        aria-controls={listboxId}
       >
         {/* Selected items */}
         <div className={`flex flex-wrap items-center gap-1.5 pr-14 ${sizeClasses[size].content}`}>
@@ -286,24 +301,6 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
             </span>
           )}
 
-          {/* Search input (visible when opened) */}
-          {searchable && isOpen && (
-            <input
-              ref={inputRef}
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') {
-                  setIsOpen(false);
-                  setSearch('');
-                }
-              }}
-              className="flex-1 bg-transparent border-none focus:ring-0 text-sm px-2 py-1 placeholder:text-text-muted/50"
-              placeholder="Search..."
-              onClick={(e) => e.stopPropagation()}
-            />
-          )}
         </div>
 
         {/* Chevron icon */}
@@ -359,15 +356,36 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
       {/* Dropdown list */}
       {isOpen && (
         <ul
-          id="multiselect-dropdown"
+          id={listboxId}
           className={`
-            absolute z-50 w-full mt-1.5 max-h-80 overflow-y-auto
+            absolute left-0 right-0 top-full z-50 mt-1.5 max-h-80 w-full overflow-y-auto overflow-x-hidden
             bg-panel border border-accent-secondary/50
             rounded-cyber shadow-[0_0_20px_rgba(0,0,0,0.8)]
             animate-[slide-down_200ms_ease-out]
           `}
           role="listbox"
         >
+          {searchable && (
+            <li className="sticky top-0 z-10 border-b border-accent-primary/10 bg-panel/95 backdrop-blur">
+              <div className={sizeClasses[size].search}>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setIsOpen(false);
+                      setSearch('');
+                    }
+                  }}
+                  className="w-full rounded-cyber border border-accent-primary/20 bg-panel px-3 py-2 text-xs text-text-primary outline-none transition-colors placeholder:text-text-muted/60 focus:border-accent-primary/60"
+                  placeholder="Search options..."
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+            </li>
+          )}
           {filteredOptions().map((option) => {
             const isSelected = value.includes(option.value);
             return (
@@ -378,7 +396,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
                 aria-disabled={option.disabled}
                 onClick={() => handleSelectChange(option)}
                 className={`
-                  flex items-center gap-3 px-4 py-3
+                  flex items-center gap-2.5 ${sizeClasses[size].option}
                   cursor-pointer transition-all duration-150
                   ${option.disabled
                     ? 'opacity-50 cursor-not-allowed'
@@ -391,7 +409,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
                 {/* Checkbox */}
                 <div
                   className={`
-                    flex items-center justify-center w-5 h-5
+                    flex items-center justify-center h-4 w-4 shrink-0
                     border rounded-cyber
                     ${isSelected
                       ? 'bg-accent-primary border-accent-primary'
@@ -400,7 +418,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
                 >
                   {isSelected && (
                     <svg
-                      className="w-3 h-3 text-black"
+                      className="h-2.5 w-2.5 text-black"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -421,6 +439,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
 
                 <span
                   className={`
+                    min-w-0 break-words text-sm leading-snug
                     ${isSelected ? 'font-semibold' : 'font-normal'}
                     ${option.disabled ? 'text-text-muted' : 'text-text-primary'}
                   `}
@@ -439,7 +458,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
 
           {/* Empty state */}
           {filteredOptions().length === 0 && (
-            <li className="px-4 py-8 text-center text-text-muted">
+            <li className="px-4 py-6 text-center text-sm text-text-muted">
               {search ? 'No matching options found' : 'No options available'}
             </li>
           )}

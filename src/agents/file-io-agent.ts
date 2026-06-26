@@ -9,7 +9,6 @@ export class FileIOAgent extends Agent implements IAgent {
     id: "file-io-agent",
     tags: ["file-io", "read-only", "write"],
     complexityRange: [1, 3],
-    tokenProfile: { min: 100, max: 1000, typical: 400 },
     timeoutMs: 15000,
     maxRetries: 2,
   };

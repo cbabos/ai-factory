@@ -23,7 +23,7 @@ Scope:
   - status: active
 - Remove `Preferred Models` from the Agents UI flow.
 - Remove agent token profile fields from the Agent form and summary cards.
-- Keep temporary backend compatibility by supplying a hidden/default token profile until the backend contract is simplified.
+- Keep temporary backend compatibility inside persistence/runtime adapters until the DB contract is simplified.
 - Move `Output Contract` and `Tool Policy` to the end of the form, just before `Notes` and `Extra Metadata JSON`.
 - Make `System Prompt` full width.
 - Add helper text to `Output Contract` clarifying that it is prompt guidance only and is not automatically validated unless `metadata.outputMode = "json"` is also set.
@@ -95,6 +95,34 @@ Scope:
 - Return ranked candidates and capture routing rationale for debugging.
 - Define fallback behavior when no candidate is good enough.
 
+Current progress:
+
+- Replaced the dispatcher's old `exact tag match + complexity preference` path with scored tag ranking.
+- Added ranked candidate scoring based on:
+  - matched task tags
+  - missing task tags
+  - extra agent tags
+- Added deterministic tie-breakers in runtime order:
+  - higher score
+  - fewer missing task tags
+  - fewer extra agent tags
+  - stable agent ID ordering
+- Removed complexity from the actual dispatcher ranking path.
+- Added a minimum acceptance gate so weak partial matches are excluded instead of always entering the ranked pool.
+- Improved no-agent results to include ranked-candidate diagnostics for easier inspection and later UI surfacing.
+- Surfaced ranked-candidate routing diagnostics in task and workflow-run inspection UI using the recorded dispatch conversation metadata.
+- Added focused tests covering:
+  - exact specialist beating a broader agent
+  - best partial match winning when no exact match exists
+  - deterministic tie resolution
+  - weak partial match rejection below the acceptance threshold
+
+Remaining in this phase:
+
+- Review and tune the exact scoring formula and minimum acceptance thresholds.
+- Decide how weak partial matches should fail or escalate instead of always being eligible.
+- Revisit `AgentRegistry.findByTags()` callers and docs so the old exact-match mental model does not linger.
+
 Open questions:
 
 - Whether fallback should fail fast, use a designated generalist, or later trigger HITL.
@@ -112,6 +140,12 @@ Scope:
   - later: reliability, latency, provider preference
 - Recompute actual cost from actual input/output token usage and model pricing.
 - Move output/token limiting responsibility to model/task/system policy rather than agent config.
+- Progress:
+  - actual execution cost is now being recomputed from real input/output token usage and selected model pricing
+  - agent edit/API payloads no longer expose token-profile or preferred-model fields
+  - runtime `AgentManifest` and built-in/configurable agents no longer depend on token-profile or preferred-model fields
+  - public store/API/runtime contracts no longer model token-profile or preferred-model fields
+  - backend storage still carries temporary SQLite compatibility columns/defaults until the schema cleanup lands
 
 Why separate:
 

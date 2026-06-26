@@ -23,6 +23,8 @@ function makeSubTask(): SubTask {
       modelId: "gpt-4o-mini",
       estimatedTokens: { min: 50, expected: 150, max: 300 },
       estimatedCost: 0.01,
+      costPer1kInput: 0.01,
+      costPer1kOutput: 0.02,
     },
   };
 }
@@ -62,9 +64,6 @@ describe("ConfigurableAgent", () => {
         tags: ["writing"],
         complexityMin: 1,
         complexityMax: 8,
-        tokenProfileMin: 100,
-        tokenProfileTypical: 400,
-        tokenProfileMax: 1200,
         timeoutMs: 30000,
         maxRetries: 1,
         description: "Creates polished release communications.",
@@ -100,9 +99,6 @@ describe("ConfigurableAgent", () => {
         tags: ["writing"],
         complexityMin: 1,
         complexityMax: 8,
-        tokenProfileMin: 100,
-        tokenProfileTypical: 400,
-        tokenProfileMax: 1200,
         timeoutMs: 30000,
         maxRetries: 1,
         metadata: {
@@ -128,9 +124,6 @@ describe("ConfigurableAgent", () => {
         tags: ["analysis"],
         complexityMin: 1,
         complexityMax: 8,
-        tokenProfileMin: 100,
-        tokenProfileTypical: 400,
-        tokenProfileMax: 1200,
         timeoutMs: 30000,
         maxRetries: 1,
         metadata: {

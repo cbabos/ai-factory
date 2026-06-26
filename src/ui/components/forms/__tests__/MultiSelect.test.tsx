@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MultiSelect } from '../MultiSelect.js';
 
 describe('MultiSelect', () => {
@@ -28,7 +28,8 @@ describe('MultiSelect', () => {
   describe('search functionality', () => {
     it('shows search input when enabled', () => {
       render(<MultiSelect options={options} searchable />);
-      expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button'));
+      expect(screen.getByPlaceholderText('Search options...')).toBeInTheDocument();
     });
   });
 
@@ -70,7 +71,8 @@ describe('MultiSelect', () => {
           placeholder="Search..."
         />
       );
-      expect(screen.getByRole('combobox')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button'));
+      expect(screen.getByRole('textbox')).toBeInTheDocument();
     });
   });
 });

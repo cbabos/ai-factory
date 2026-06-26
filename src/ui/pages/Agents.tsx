@@ -11,8 +11,10 @@ import {
   apiClient,
   type AgentMutationInput,
   type AgentRecord,
+  type ModelRecord,
   type TagMutationInput,
   type TagRecord,
+  type WorkflowDefinitionRecord,
 } from '../services/index.js';
 
 interface AgentFilter {
@@ -66,6 +68,27 @@ interface TagDraftState {
   description: string;
 }
 
+interface LegacyTagUsageRecord {
+  id: string;
+  counts: {
+    agents: number;
+    models: number;
+    workflowSteps: number;
+  };
+}
+
+interface LegacyNormalizationPreview {
+  agents: number;
+  models: number;
+  workflows: number;
+  workflowSteps: number;
+}
+
+interface LegacyNormalizationSummary extends LegacyNormalizationPreview {
+  sourceTagId: string;
+  targetTagId: string;
+}
+
 const formatAvailabilityLabel = (isActive: boolean): string => {
   return isActive ? 'available' : 'inactive';
 };
@@ -94,7 +117,9 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
   subtitle = 'Manage AI agent configurations',
 }) => {
   const [agents, setAgents] = useState<AgentRecord[]>([]);
+  const [models, setModels] = useState<ModelRecord[]>([]);
   const [tags, setTags] = useState<TagRecord[]>([]);
+  const [workflows, setWorkflows] = useState<WorkflowDefinitionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -104,6 +129,10 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
   const [deletingAgent, setDeletingAgent] = useState<string | null>(null);
   const [tagDraft, setTagDraft] = useState<TagDraftState>({ label: '', description: '' });
   const [tagSearch, setTagSearch] = useState('');
+  const [normalizingLegacyTagId, setNormalizingLegacyTagId] = useState<string | null>(null);
+  const [normalizationTargetTagId, setNormalizationTargetTagId] = useState('');
+  const [createAndNormalizeLegacyTagId, setCreateAndNormalizeLegacyTagId] = useState<string | null>(null);
+  const [normalizationSummary, setNormalizationSummary] = useState<LegacyNormalizationSummary | null>(null);
   const [filter, setFilter] = useState<AgentFilter>({
     tags: [],
     complexity: '',
@@ -113,16 +142,20 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
   const loadAgents = useCallback(async () => {
     try {
       setLoading(true);
-      const [agentData, tagData] = await Promise.all([
+      const [agentData, modelData, tagData, workflowData] = await Promise.all([
         apiClient.listAgents(),
+        apiClient.listModels(),
         apiClient.listTags(),
+        apiClient.listWorkflows(),
       ]);
       setAgents(agentData);
+      setModels(modelData);
       setTags(tagData);
+      setWorkflows(workflowData);
       setError(null);
     } catch (err) {
       console.error('Failed to load agents:', err);
-      setError('Failed to load agents and tags. Please check the API connection.');
+      setError('Failed to load agents, models, workflows, and tags. Please check the API connection.');
     } finally {
       setLoading(false);
     }
@@ -195,11 +228,6 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
         tags: agentData.tags || [],
         complexityMin: agentData.complexityMin ?? 1,
         complexityMax: agentData.complexityMax ?? 5,
-        tokenProfile: agentData.tokenProfile || {
-          min: 100,
-          max: 1500,
-          typical: 750,
-        },
         timeoutMs: agentData.timeoutMs ?? 30000,
         maxRetries: agentData.maxRetries ?? 5,
         isActive: agentData.isActive ?? true,
@@ -233,14 +261,20 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
   const resetTagDraft = () => {
     setEditingTag(null);
     setTagDraft({ label: '', description: '' });
+    setCreateAndNormalizeLegacyTagId(null);
   };
 
   const handleManageTags = () => {
     resetTagDraft();
+    setTagSearch('');
+    setNormalizingLegacyTagId(null);
+    setNormalizationTargetTagId('');
+    setNormalizationSummary(null);
     setShowTagManager(true);
   };
 
   const handleEditTag = (tag: TagRecord) => {
+    setCreateAndNormalizeLegacyTagId(null);
     setEditingTag(tag);
     setTagDraft({
       label: tag.label,
@@ -248,7 +282,44 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
     });
   };
 
-  const handleTagSubmit = async () => {
+  const normalizeLegacyTagToTarget = async (legacyTagId: string, targetTagId: string): Promise<void> => {
+    const affectedAgents = agents.filter((agent) => agent.tags.includes(legacyTagId));
+    const affectedModels = models.filter((model) => model.capabilities.includes(legacyTagId));
+    const affectedWorkflows = workflows.filter((workflow) =>
+      workflow.steps.some((step) => (step.capabilityTags ?? []).includes(legacyTagId)),
+    );
+
+    await Promise.all([
+      ...affectedAgents.map((agent) =>
+        apiClient.updateAgent(agent.id, {
+          ...agent,
+          tags: replaceTagValue(agent.tags, legacyTagId, targetTagId),
+        }),
+      ),
+      ...affectedModels.map((model) =>
+        apiClient.updateModel(model.provider, model.modelId, {
+          capabilities: replaceTagValue(model.capabilities, legacyTagId, targetTagId),
+        }),
+      ),
+      ...affectedWorkflows.map((workflow) =>
+        apiClient.updateWorkflow(workflow.id, {
+          name: workflow.name,
+          version: workflow.version + 1,
+          status: workflow.status,
+          description: workflow.description,
+          metadata: workflow.metadata,
+          steps: workflow.steps.map((step) => ({
+            ...step,
+            capabilityTags: step.capabilityTags
+              ? replaceTagValue(step.capabilityTags, legacyTagId, targetTagId)
+              : step.capabilityTags,
+          })),
+        }),
+      ),
+    ]);
+  };
+
+  const handleTagSubmit = async (normalizeAfterCreate = false) => {
     const label = tagDraft.label.trim();
     if (!label) {
       setError('Tag label is required');
@@ -270,17 +341,29 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
 
     try {
       setLoading(true);
+
       if (editingTag) {
         await apiClient.updateTag(editingTag.id, payload);
       } else {
-        await apiClient.createTag(payload);
+        const created = await apiClient.createTag(payload);
+        if (normalizeAfterCreate && createAndNormalizeLegacyTagId) {
+          const summary = buildNormalizationSummary(createAndNormalizeLegacyTagId);
+          await normalizeLegacyTagToTarget(createAndNormalizeLegacyTagId, created.id);
+          setNormalizationSummary({
+            ...summary,
+            sourceTagId: createAndNormalizeLegacyTagId,
+            targetTagId: created.id,
+          });
+        }
       }
       await loadAgents();
       resetTagDraft();
+      setNormalizingLegacyTagId(null);
+      setNormalizationTargetTagId('');
       setError(null);
     } catch (err) {
       console.error('Failed to save tag:', err);
-      setError('Failed to save tag');
+      setError(normalizeAfterCreate ? 'Failed to create and normalize tag' : 'Failed to save tag');
     } finally {
       setLoading(false);
     }
@@ -302,6 +385,48 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
     } catch (err) {
       console.error('Failed to update tag status:', err);
       setError('Failed to update tag status');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePrefillFromLegacyTag = (legacyTagId: string) => {
+    setEditingTag(null);
+    setCreateAndNormalizeLegacyTagId(legacyTagId);
+    setTagDraft({
+      label: legacyTagId,
+      description: '',
+    });
+  };
+
+  const replaceTagValue = (values: string[], source: string, target: string): string[] => {
+    const nextValues = values.map((value) => (value === source ? target : value));
+    return nextValues.filter((value, index) => nextValues.indexOf(value) === index);
+  };
+
+  const handleNormalizeLegacyTag = async (legacy: LegacyTagUsageRecord) => {
+    if (!normalizationTargetTagId) {
+      setError('Choose a target shared tag before applying normalization');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const summary = buildNormalizationSummary(legacy.id);
+      await normalizeLegacyTagToTarget(legacy.id, normalizationTargetTagId);
+
+      await loadAgents();
+      setNormalizingLegacyTagId(null);
+      setNormalizationTargetTagId('');
+      setNormalizationSummary({
+        ...summary,
+        sourceTagId: legacy.id,
+        targetTagId: normalizationTargetTagId,
+      });
+      setError(null);
+    } catch (err) {
+      console.error('Failed to normalize legacy tag:', err);
+      setError('Failed to normalize legacy tag');
     } finally {
       setLoading(false);
     }
@@ -349,6 +474,124 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
       return label.includes(query) || description.includes(query);
     });
   }, [tagSearch, tags]);
+
+  const tagUsage = useMemo(() => {
+    const usage = new Map<string, { agents: number; models: number; workflowSteps: number }>();
+
+    const ensure = (tagId: string) => {
+      const existing = usage.get(tagId);
+      if (existing) {
+        return existing;
+      }
+
+      const next = { agents: 0, models: 0, workflowSteps: 0 };
+      usage.set(tagId, next);
+      return next;
+    };
+
+    agents.forEach((agent) => {
+      agent.tags.forEach((tagId) => {
+        ensure(tagId).agents += 1;
+      });
+    });
+
+    models.forEach((model) => {
+      model.capabilities.forEach((tagId) => {
+        ensure(tagId).models += 1;
+      });
+    });
+
+    workflows.forEach((workflow) => {
+      workflow.steps.forEach((step) => {
+        (step.capabilityTags ?? []).forEach((tagId) => {
+          ensure(tagId).workflowSteps += 1;
+        });
+      });
+    });
+
+    return usage;
+  }, [agents, models, workflows]);
+
+  const legacyTagUsage = useMemo<LegacyTagUsageRecord[]>(() => {
+    const knownTagIds = new Set(tags.map((tag) => tag.id));
+    const usage = new Map<string, { agents: number; models: number; workflowSteps: number }>();
+
+    const ensure = (tagId: string) => {
+      const existing = usage.get(tagId);
+      if (existing) {
+        return existing;
+      }
+
+      const next = { agents: 0, models: 0, workflowSteps: 0 };
+      usage.set(tagId, next);
+      return next;
+    };
+
+    agents.forEach((agent) => {
+      agent.tags.forEach((tagId) => {
+        if (!knownTagIds.has(tagId)) {
+          ensure(tagId).agents += 1;
+        }
+      });
+    });
+
+    models.forEach((model) => {
+      model.capabilities.forEach((tagId) => {
+        if (!knownTagIds.has(tagId)) {
+          ensure(tagId).models += 1;
+        }
+      });
+    });
+
+    workflows.forEach((workflow) => {
+      workflow.steps.forEach((step) => {
+        (step.capabilityTags ?? []).forEach((tagId) => {
+          if (!knownTagIds.has(tagId)) {
+            ensure(tagId).workflowSteps += 1;
+          }
+        });
+      });
+    });
+
+    return Array.from(usage.entries())
+      .map(([id, counts]) => ({ id, counts }))
+      .sort((left, right) => left.id.localeCompare(right.id));
+  }, [agents, models, tags, workflows]);
+
+  const filteredLegacyTagUsage = useMemo(() => {
+    const query = tagSearch.trim().toLowerCase();
+    if (!query) {
+      return legacyTagUsage;
+    }
+
+    return legacyTagUsage.filter(({ id }) => id.toLowerCase().includes(query));
+  }, [legacyTagUsage, tagSearch]);
+
+  const buildNormalizationSummary = (legacyTagId: string): LegacyNormalizationPreview => {
+    const affectedAgents = agents.filter((agent) => agent.tags.includes(legacyTagId)).length;
+    const affectedModels = models.filter((model) => model.capabilities.includes(legacyTagId)).length;
+    const affectedWorkflows = workflows.filter((workflow) =>
+      workflow.steps.some((step) => (step.capabilityTags ?? []).includes(legacyTagId)),
+    );
+    const affectedWorkflowSteps = affectedWorkflows.reduce((total, workflow) => {
+      return total + workflow.steps.filter((step) => (step.capabilityTags ?? []).includes(legacyTagId)).length;
+    }, 0);
+
+    return {
+      agents: affectedAgents,
+      models: affectedModels,
+      workflows: affectedWorkflows.length,
+      workflowSteps: affectedWorkflowSteps,
+    };
+  };
+
+  const normalizationPreview = useMemo<LegacyNormalizationPreview | null>(() => {
+    if (!normalizingLegacyTagId) {
+      return null;
+    }
+
+    return buildNormalizationSummary(normalizingLegacyTagId);
+  }, [agents, models, normalizingLegacyTagId, workflows]);
 
   if (loading && agents.length === 0) {
     return (
@@ -705,6 +948,7 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
                   value={tagDraft.label}
                   onChange={(event) => setTagDraft((prev) => ({ ...prev, label: event.target.value }))}
                   placeholder="MCP"
+                  helpText="Use concise singular names. Avoid near-duplicates that differ only by casing or wording."
                   cyberBorder
                 />
 
@@ -723,14 +967,35 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
                   ID preview: <span className="font-mono text-text-primary">{editingTag?.id ?? (slugifyTagLabel(tagDraft.label) || 'tag-id')}</span>
                 </div>
 
+                <div className="rounded-cyber border border-accent-primary/10 bg-panel/40 px-3 py-2 text-xs leading-relaxed text-text-secondary">
+                  Naming guide: prefer stable domain tags like <span className="font-mono text-text-primary">mcp</span>, <span className="font-mono text-text-primary">analysis</span>, or <span className="font-mono text-text-primary">code-generation</span>. Avoid creating multiple tags for the same concept.
+                </div>
+
                 <div className="flex flex-wrap gap-3">
                   <Button type="button" variant="primary" size="sm" onClick={handleTagSubmit}>
                     {editingTag ? 'Save Tag' : 'Create Tag'}
                   </Button>
+                  {!editingTag && createAndNormalizeLegacyTagId ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void handleTagSubmit(true)}
+                    >
+                      Create And Normalize
+                    </Button>
+                  ) : null}
                   <Button type="button" variant="ghost" size="sm" onClick={resetTagDraft}>
                     Clear
                   </Button>
                 </div>
+
+                {!editingTag && createAndNormalizeLegacyTagId ? (
+                  <div className="rounded-cyber border border-accent-warning/20 bg-accent-warning/5 px-3 py-2 text-xs leading-relaxed text-text-secondary">
+                    Creating from legacy value <span className="font-mono text-text-primary">{createAndNormalizeLegacyTagId}</span>.
+                    Use <span className="text-text-primary">Create And Normalize</span> to create this shared tag and immediately remap all existing references.
+                  </div>
+                ) : null}
               </section>
 
               <section className="flex min-h-0 flex-col space-y-3 overflow-hidden">
@@ -748,6 +1013,26 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
                   </span>
                 </div>
 
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="rounded-cyber border border-accent-primary/15 bg-panel/60 px-3 py-3">
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Registered Tags</div>
+                    <div className="mt-2 text-xl font-semibold text-text-primary">{tags.length}</div>
+                  </div>
+                  <div className="rounded-cyber border border-accent-primary/15 bg-panel/60 px-3 py-3">
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Legacy In Use</div>
+                    <div className="mt-2 text-xl font-semibold text-text-primary">{legacyTagUsage.length}</div>
+                  </div>
+                  <div className="rounded-cyber border border-accent-primary/15 bg-panel/60 px-3 py-3">
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted">Unused Tags</div>
+                    <div className="mt-2 text-xl font-semibold text-text-primary">
+                      {tags.filter((tag) => {
+                        const usage = tagUsage.get(tag.id);
+                        return !usage || (usage.agents + usage.models + usage.workflowSteps) === 0;
+                      }).length}
+                    </div>
+                  </div>
+                </div>
+
                 <Input
                   label="Search Tags"
                   value={tagSearch}
@@ -756,6 +1041,29 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
                   helpText='Substring match. Example: "cp" finds MCP, cPanel, and descriptions containing cp.'
                   cyberBorder
                 />
+
+                {normalizationSummary ? (
+                  <div className="rounded-cyber border border-accent-success/20 bg-accent-success/5 px-4 py-3">
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-accent-success">Last Normalization</div>
+                    <div className="mt-2 text-sm text-text-primary">
+                      <span className="font-mono">{normalizationSummary.sourceTagId}</span> → <span className="font-mono">{normalizationSummary.targetTagId}</span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-1.5 text-[10px]">
+                      <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-text-primary">
+                        {normalizationSummary.agents} agents
+                      </span>
+                      <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-text-primary">
+                        {normalizationSummary.models} models
+                      </span>
+                      <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-text-primary">
+                        {normalizationSummary.workflows} workflows
+                      </span>
+                      <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-text-primary">
+                        {normalizationSummary.workflowSteps} workflow steps
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="min-h-0 flex-1 overflow-y-auto pr-1">
                   {tags.length === 0 ? (
@@ -768,6 +1076,124 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
                     </div>
                   ) : (
                     <div className="space-y-3">
+                      {filteredLegacyTagUsage.length > 0 ? (
+                        <div className="rounded-cyber border border-accent-warning/20 bg-accent-warning/5 px-4 py-3">
+                          <div className="text-[10px] uppercase tracking-[0.14em] text-accent-warning">Legacy Values In Use</div>
+                          <div className="mt-3 space-y-2">
+                            {filteredLegacyTagUsage.map(({ id, counts }) => (
+                              <div key={id} className="flex flex-col gap-2 rounded-cyber border border-accent-warning/15 bg-panel/50 px-3 py-2 md:flex-row md:items-center md:justify-between">
+                                <div>
+                                  <div className="font-mono text-sm text-text-primary">{id}</div>
+                                  <div className="text-xs text-text-secondary">
+                                    Create a shared tag for this value or migrate references to an existing tag.
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap gap-1.5 text-[10px]">
+                                  <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-text-primary">
+                                    {counts.agents} agents
+                                  </span>
+                                  <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-text-primary">
+                                    {counts.models} models
+                                  </span>
+                                  <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-text-primary">
+                                    {counts.workflowSteps} workflow steps
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handlePrefillFromLegacyTag(id)}
+                                  >
+                                    Create Shared Tag
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={() => {
+                                      setNormalizingLegacyTagId(id);
+                                      setNormalizationTargetTagId('');
+                                    }}
+                                  >
+                                    Normalize
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {normalizingLegacyTagId ? (
+                        <div className="rounded-cyber border border-accent-primary/20 bg-accent-primary/5 px-4 py-4">
+                          <div className="text-sm font-semibold text-text-primary">
+                            Normalize Legacy Tag <span className="font-mono">{normalizingLegacyTagId}</span>
+                          </div>
+                          <p className="mt-1 text-xs text-text-secondary">
+                            This will replace the legacy value across agents, models, and workflow step capability tags.
+                          </p>
+                          {normalizationPreview ? (
+                            <div className="mt-3 flex flex-wrap gap-1.5 text-[10px]">
+                              <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-text-primary">
+                                {normalizationPreview.agents} agents
+                              </span>
+                              <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-text-primary">
+                                {normalizationPreview.models} models
+                              </span>
+                              <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-text-primary">
+                                {normalizationPreview.workflows} workflows
+                              </span>
+                              <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-text-primary">
+                                {normalizationPreview.workflowSteps} workflow steps
+                              </span>
+                            </div>
+                          ) : null}
+                          <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
+                            <Select
+                              label="Target Shared Tag"
+                              value={normalizationTargetTagId}
+                              onChange={(event) => setNormalizationTargetTagId(event.target.value)}
+                              options={[
+                                { value: '', label: 'Choose a shared tag' },
+                                ...tags
+                                  .filter((tag) => tag.isActive)
+                                  .map((tag) => ({
+                                    value: tag.id,
+                                    label: `${tag.label} (${tag.id})`,
+                                  })),
+                              ]}
+                            />
+                            <Button
+                              type="button"
+                              variant="primary"
+                              size="sm"
+                              onClick={() => {
+                                const legacy = legacyTagUsage.find((entry) => entry.id === normalizingLegacyTagId);
+                                if (legacy) {
+                                  void handleNormalizeLegacyTag(legacy);
+                                }
+                              }}
+                              loading={loading}
+                            >
+                              Apply
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setNormalizingLegacyTagId(null);
+                                setNormalizationTargetTagId('');
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
+
                       {filteredTags.map((tag) => (
                         <div
                           key={tag.id}
@@ -797,6 +1223,17 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
                               <p className="mt-2 text-sm leading-relaxed text-text-secondary">
                                 {tag.description?.trim() || 'No description yet.'}
                               </p>
+                              <div className="mt-3 flex flex-wrap gap-1.5 text-[10px]">
+                                <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-text-primary">
+                                  {tagUsage.get(tag.id)?.agents ?? 0} agents
+                                </span>
+                                <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-text-primary">
+                                  {tagUsage.get(tag.id)?.models ?? 0} models
+                                </span>
+                                <span className="rounded-full border border-accent-primary/20 bg-accent-primary/10 px-2 py-0.5 text-text-primary">
+                                  {tagUsage.get(tag.id)?.workflowSteps ?? 0} workflow steps
+                                </span>
+                              </div>
                             </div>
 
                             <div className="flex shrink-0 gap-2">

@@ -10,12 +10,6 @@ function _agentRecordToDTO(agent: AgentRecord): Record<string, unknown> {
     tags: agent.tags,
     complexityMin: agent.complexityMin,
     complexityMax: agent.complexityMax,
-    tokenProfile: {
-      min: agent.tokenProfile.min,
-      max: agent.tokenProfile.max,
-      typical: agent.tokenProfile.typical,
-    },
-    preferredModels: agent.preferredModels,
     timeoutMs: agent.timeoutMs,
     maxRetries: agent.maxRetries,
     version: agent.version,
@@ -26,29 +20,6 @@ function _agentRecordToDTO(agent: AgentRecord): Record<string, unknown> {
     createdAt: agent.createdAt,
     updatedAt: agent.updatedAt,
   };
-}
-
-interface ParsedTokenProfile {
-  min: number;
-  max: number;
-  typical: number;
-}
-
-function _parseTokenProfile(body: Record<string, unknown>): ParsedTokenProfile | null {
-  const nested = body.tokenProfile as Record<string, unknown> | undefined;
-  const min = nested?.min ?? body.tokenProfileMin;
-  const max = nested?.max ?? body.tokenProfileMax;
-  const typical = nested?.typical ?? body.tokenProfileTypical;
-
-  if (
-    typeof min !== "number" ||
-    typeof max !== "number" ||
-    typeof typical !== "number"
-  ) {
-    return null;
-  }
-
-  return { min, max, typical };
 }
 
 function _syncRuntime(req: Request, event: AgentRuntimeSync): void {
@@ -129,15 +100,13 @@ export async function createAgent(
     const store = req.app.get("agentStore") as IAgentStore;
 
     const body = req.body as Record<string, unknown>;
-    const tokenProfile = _parseTokenProfile(body);
     if (
       !body ||
       typeof body.id !== "string" ||
       typeof body.name !== "string" ||
       !Array.isArray(body.tags) ||
       typeof body.complexityMin !== "number" ||
-      typeof body.complexityMax !== "number" ||
-      tokenProfile === null
+      typeof body.complexityMax !== "number"
     ) {
       throw new ApiError("Invalid request body", { statusCode: 400 });
     }
@@ -148,10 +117,6 @@ export async function createAgent(
       tags: body.tags,
       complexityMin: body.complexityMin,
       complexityMax: body.complexityMax,
-      tokenProfileMin: tokenProfile.min,
-      tokenProfileMax: tokenProfile.max,
-      tokenProfileTypical: tokenProfile.typical,
-      preferredModels: body.preferredModels as string[] | undefined,
       timeoutMs: (body.timeoutMs as number) ?? 30000,
       maxRetries: (body.maxRetries as number) ?? 2,
       configSource: (body.configSource as "static" | "custom") ?? "static",
@@ -177,22 +142,16 @@ export async function updateAgent(
     const { id } = req.params;
 
     const body = req.body as Record<string, unknown>;
-    const tokenProfile = _parseTokenProfile(body);
 
     const existing = store.get(id as string);
     if (!existing) {
       throw new ApiError("Agent not found", { statusCode: 404 });
     }
-
     const updates: Record<string, unknown> = {
       name: body.name ?? existing.name,
       tags: body.tags ?? existing.tags,
       complexityMin: body.complexityMin ?? existing.complexityMin,
       complexityMax: body.complexityMax ?? existing.complexityMax,
-      tokenProfileMin: tokenProfile?.min ?? existing.tokenProfile.min,
-      tokenProfileMax: tokenProfile?.max ?? existing.tokenProfile.max,
-      tokenProfileTypical: tokenProfile?.typical ?? existing.tokenProfile.typical,
-      preferredModels: body.preferredModels ?? existing.preferredModels,
       timeoutMs: body.timeoutMs ?? existing.timeoutMs,
       maxRetries: body.maxRetries ?? existing.maxRetries,
       description: body.description ?? existing.description,
@@ -201,15 +160,10 @@ export async function updateAgent(
     };
 
     const record = store.update(id as string, {
-      id: id as string,
       name: updates.name as string,
       tags: updates.tags as string[],
       complexityMin: updates.complexityMin as number,
       complexityMax: updates.complexityMax as number,
-      tokenProfileMin: updates.tokenProfileMin as number,
-      tokenProfileMax: updates.tokenProfileMax as number,
-      tokenProfileTypical: updates.tokenProfileTypical as number,
-      preferredModels: updates.preferredModels as string[] | undefined,
       timeoutMs: updates.timeoutMs as number,
       maxRetries: updates.maxRetries as number,
       description: updates.description as string | undefined,

@@ -8,8 +8,6 @@ function makeManifest(id: string, tags: string[], complexityRange: [number, numb
     id,
     tags,
     complexityRange,
-    tokenProfile: { min: 100, max: 1000, typical: 500 },
-    preferredModels: ["gpt-4o-mini"],
     timeoutMs: 30000,
     maxRetries: 2,
   };
@@ -62,5 +60,42 @@ describe("AgentRegistry", () => {
     registry.register(makeManifest("a1", ["search"], [1, 4]));
     registry.register(makeManifest("a2", ["analysis"], [3, 7]));
     expect(registry.getAll()).toHaveLength(2);
+  });
+
+  it("ranks exact specialists ahead of broader agents", () => {
+    const registry = new AgentRegistry(new EventBus());
+    registry.register(makeManifest("specialist", ["mcp"], [5, 10]));
+    registry.register(makeManifest("broad", ["mcp", "analysis", "execution"], [1, 10]));
+
+    const ranked = registry.rankByTags(["mcp"]);
+    expect(ranked.map((candidate) => candidate.manifest.id)).toEqual(["specialist", "broad"]);
+  });
+
+  it("finds the best partial match when no exact match exists", () => {
+    const registry = new AgentRegistry(new EventBus());
+    registry.register(makeManifest("mcp-builder", ["mcp", "execution", "analysis"], [1, 10]));
+    registry.register(makeManifest("executor", ["execution"], [1, 10]));
+    registry.register(makeManifest("unrelated", ["finance"], [1, 10]));
+
+    const ranked = registry.rankByTags(["mcp", "execution", "analysis"]);
+    expect(ranked.map((candidate) => candidate.manifest.id)).toEqual(["mcp-builder"]);
+  });
+
+  it("uses deterministic tie resolution", () => {
+    const registry = new AgentRegistry(new EventBus());
+    registry.register(makeManifest("agent-b", ["analysis"], [1, 10]));
+    registry.register(makeManifest("agent-a", ["analysis"], [1, 10]));
+
+    const ranked = registry.rankByTags(["analysis"]);
+    expect(ranked.map((candidate) => candidate.manifest.id)).toEqual(["agent-a", "agent-b"]);
+  });
+
+  it("rejects weak partial matches below half coverage", () => {
+    const registry = new AgentRegistry(new EventBus());
+    registry.register(makeManifest("single-match", ["analysis"], [1, 10]));
+    registry.register(makeManifest("two-match", ["analysis", "mcp"], [1, 10]));
+
+    const ranked = registry.rankByTags(["analysis", "mcp", "execution", "write"]);
+    expect(ranked.map((candidate) => candidate.manifest.id)).toEqual(["two-match"]);
   });
 });

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { appRoutes } from '../app-routes.js';
 import { ConversationTurnView } from '../components/conversation/ConversationTurnView.js';
+import { RoutingDiagnosticsView } from '../components/conversation/RoutingDiagnosticsView.js';
 import { Button } from '../components/controls/Button.js';
 import { TextArea } from '../components/forms/TextArea.js';
 import { Panel } from '../components/layout/Panel.js';
@@ -261,6 +262,7 @@ export default function WorkflowRunDetailsPage() {
 
               {step.conversation && step.conversation.length > 0 ? (
                 <div className="mt-4 space-y-3">
+                  <RoutingDiagnosticsView title="Step Routing Diagnostics" turns={step.conversation} />
                   {step.conversation.map((turn, index) => (
                     <ConversationTurnView key={`${step.stepId}-${turn.timestamp}-${index}`} turn={turn} />
                   ))}

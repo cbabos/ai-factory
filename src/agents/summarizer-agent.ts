@@ -9,7 +9,6 @@ export class SummarizerAgent extends Agent implements IAgent {
     id: "summarizer-agent",
     tags: ["summarization", "synthesis"],
     complexityRange: [1, 5],
-    tokenProfile: { min: 200, max: 1500, typical: 600 },
     timeoutMs: 30000,
     maxRetries: 1,
   };

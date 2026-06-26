@@ -34,6 +34,8 @@ function makeSubTask(id = "s1", tags: string[] = ["search"]): SubTask {
       modelId: "gpt-4o-mini",
       estimatedTokens: { min: 100, max: 500, expected: 250 },
       estimatedCost: 0.001,
+      costPer1kInput: 0.01,
+      costPer1kOutput: 0.02,
     },
   };
 }
@@ -78,13 +80,14 @@ describe("Agent base behavior", () => {
     expect(result.output).toEqual({ findings: "found config-loader.ts" });
     expect(result.modelUsed.modelId).toBe("gpt-4o-mini");
     expect(result.actualTokens).toEqual({ input: 10, output: 10, total: 20 });
+    expect(result.actualCost).toBeCloseTo(0.0003, 6);
     expect(result.retries).toBe(0);
 
     expect(callMock).toHaveBeenCalledOnce();
     const callArgs = callMock.mock.calls[0];
     const options = callArgs?.[1] as unknown as Record<string, unknown>;
     expect(options.model).toBe("gpt-4o-mini");
-    expect(options.maxTokens).toBe(2000);
+    expect(options.maxTokens).toBeUndefined();
   });
 
   it("retries on failure and falls back when available", async () => {
@@ -99,6 +102,8 @@ describe("Agent base behavior", () => {
         modelId: "claude-haiku",
         estimatedTokens: { min: 100, max: 500, expected: 250 },
         estimatedCost: 0.0005,
+        costPer1kInput: 0.01,
+        costPer1kOutput: 0.02,
       },
       latencyMs: 5,
       retries: 1,

@@ -61,7 +61,7 @@ Task arrives
          ▼
 ┌─────────────────┐
 │ Agent Pool       │  Many tiny agents. Each declares: capability tags, complexity
-│                  │  range, token profile, preferred models. Stateless.
+│                  │  range, timeout, and retry policy. Stateless.
 └────────┬────────┘
          │
          ▼
@@ -413,8 +413,6 @@ interface AgentManifest {
   id: string;                          // unique identifier
   tags: CapabilityTag[];               // e.g. ["search", "codebase", "read-only"]
   complexityRange: [number, number];   // e.g. [1, 4] — this agent handles simple tasks
-  tokenProfile: TokenProfile;          // { min, max, typical }
-  preferredModels: string[];           // e.g. ["claude-haiku", "gemini-flash"]
   timeoutMs: number;
   maxRetries: number;
 }
@@ -458,22 +456,25 @@ BudgetTracker extends Configurable<BudgetConfig> implements IBudgetTracker
 
 ### 8. `AgentRegistry` (`agent-registry.ts`)
 
-**Purpose**: Service registry for agents. Stores manifests, provides lookup by tags and complexity range.
+**Purpose**: Service registry for agents. Stores manifests and provides exact-match, scored tag-ranking, and complexity-range lookups.
 
 ```
 AgentRegistry implements IAgentRegistry
   ├── register(manifest): void       (stores manifest, emits agent:registered)
   ├── unregister(agentId): void      (removes manifest, emits agent:unregistered)
   ├── get(agentId): AgentManifest?   (direct lookup)
-  ├── findByTags(tags[]): AgentManifest[]  (AND match — all tags must be present)
+  ├── findByTags(tags[]): AgentManifest[]  (legacy exact-match helper)
+  ├── rankByTags(tags[]): RankedAgentCandidate[]  (scored capability ranking)
   ├── findByComplexity(score): AgentManifest[]  (score within [min, max] range)
   └── getAll(): AgentManifest[]      (all registered manifests)
 ```
 
 **Lookup semantics**:
-- `findByTags` uses AND logic: an agent must have **all** requested tags to match
+- `findByTags` retains strict AND logic for legacy/exact-match callers
+- `rankByTags` is the runtime routing path: it scores candidates by matched task tags, missing task tags, and extra agent tags
+- `rankByTags` excludes weak partial matches that do not cover at least half of the requested tags
 - `findByComplexity` uses range check: `score >= min && score <= max`
-- The Dispatcher uses both: first filters by tags, then prefers agents whose complexity range matches, falls back to any tag-matching agent
+- The Dispatcher now routes from `rankByTags`; complexity remains available as metadata but is not used for agent ranking
 
 ### 9. `Dispatcher` (`dispatcher.ts`)
 
@@ -482,7 +483,7 @@ AgentRegistry implements IAgentRegistry
 ```
 Dispatcher extends PipelineStep<SubTask[], TaskResult[]> implements IDispatcher
   ├── execute(subTasks[]): TaskResult[]  (main dispatch loop)
-  ├── findAgent(subTask): IAgent?        (matches by tags + complexity)
+  ├── findAgent(subTask): IAgent?        (selects highest-ranked eligible candidate)
   └── noAgentResult(subTask): TaskResult (failure result when no agent found)
 ```
 
@@ -498,10 +499,15 @@ Dispatcher extends PipelineStep<SubTask[], TaskResult[]> implements IDispatcher
 5. Return results in original sub-task order
 
 **Agent matching** (`findAgent`):
-1. Query registry by `subTask.capabilityTags` (AND match)
-2. Filter candidates by complexity range match
-3. Try complexity-matched agents first, then fall back to any tag-matched agent
-4. Look up the agent instance from the `agents` Map
+1. Query registry by `subTask.capabilityTags` using scored ranking
+2. Exclude weak partial matches via the minimum-acceptance rule
+3. Sort remaining candidates by:
+   a. higher score
+   b. fewer missing task tags
+   c. fewer extra agent tags
+   d. stable agent ID ordering
+4. Select the first agent instance available in the `agents` Map
+5. If no agent is eligible, emit a failure result with ranked-candidate diagnostics for inspection
 
 ### 10. `Orchestrator` (`orchestrator.ts`)
 
@@ -611,7 +617,7 @@ The AI Factory maps directly to microservices patterns:
 |------|---------|------------|
 | `ModelInfo` | Static model catalog entry | `provider`, `modelId`, `maxTokens`, `costPer1kInput`, `costPer1kOutput`, `capabilities` |
 | `DiscoveredModel` | Live-discovered model from a provider API | `provider`, `modelId`, `ownedBy` |
-| `ModelChoice` | Selected model for a SubTask | `provider`, `modelId`, `estimatedTokens`, `estimatedCost`, `fallback?` |
+| `ModelChoice` | Selected model for a SubTask | `provider`, `modelId`, `estimatedTokens`, `estimatedCost`, `costPer1kInput`, `costPer1kOutput`, `fallback?` |
 
 ### Execution Results
 
@@ -631,8 +637,7 @@ The AI Factory maps directly to microservices patterns:
 
 | Type | Purpose | Key Fields |
 |------|---------|------------|
-| `AgentManifest` | What an agent declares about itself | `id`, `tags[]`, `complexityRange`, `tokenProfile`, `preferredModels[]`, `timeoutMs`, `maxRetries` |
-| `TokenProfile` | Agent's typical token usage | `min`, `max`, `typical` |
+| `AgentManifest` | What an agent declares about itself | `id`, `tags[]`, `complexityRange`, `timeoutMs`, `maxRetries` |
 
 ### Events & Tracing
 
@@ -694,7 +699,7 @@ The AI Factory maps directly to microservices patterns:
 | `IEventBus` | `emit(event)`, `on(type, handler) → Subscription`, `off(type, handler)` | Decoupled pub/sub |
 | `ITracer` | `startTrace`, `startSpan`, `endSpan`, `endTrace`, `getTrace` | Distributed tracing |
 | `IBudgetTracker` | `getState`, `getAllStates`, `canAfford`, `recordUsage`, `reset` | Per-provider token/cost ledger |
-| `IAgentRegistry` | `register`, `unregister`, `get`, `findByTags`, `findByComplexity`, `getAll` | Agent discovery |
+| `IAgentRegistry` | `register`, `unregister`, `get`, `findByTags`, `rankByTags`, `findByComplexity`, `getAll` | Agent discovery |
 | `IRepository<T>` | `get`, `getAll`, `save`, `delete`, `query` | Generic persistence |
 | `ILLMCaller` | `call`, `callStructured<T>`, `estimateTokens`, `listModels` | LLM provider abstraction |
 | `IConfigurable<TConfig>` | `config`, `loadConfig`, `validateConfig` | Configuration loading/validation |
@@ -715,7 +720,7 @@ All data types. No logic, no imports (except internal references). Organized in 
 - Model Selection (ModelChoice)
 - Execution (TaskResult, TokenUsage, FinalResult)
 - Budget (BudgetState)
-- Agent Manifest (AgentManifest, TokenProfile)
+- Agent Manifest (AgentManifest)
 - Delivery (DeliveryReceipt)
 - Events (EventType union, FactoryEvent)
 - Tracing (TaskTrace, TraceSpan)
@@ -777,11 +782,11 @@ Concrete implementation. Extends `Configurable<BudgetConfig>`. Maintains a `Map<
 
 ### `src/core/agent-registry.ts` (60 lines)
 
-Concrete implementation. `Map<agentId, AgentManifest>`. `register()` and `unregister()` emit `agent:registered` / `agent:unregistered` events. `findByTags()` uses AND logic — all requested tags must be present. `findByComplexity()` checks score against `[min, max]` range. Used by the Dispatcher to match SubTasks to agents.
+Concrete implementation. `Map<agentId, AgentManifest>`. `register()` and `unregister()` emit `agent:registered` / `agent:unregistered` events. `findByTags()` remains available as a strict AND-match helper. `rankByTags()` is the runtime routing path: it scores candidates by matched task tags, missing task tags, and extra agent tags, then applies deterministic tie-breakers and a minimum-acceptance threshold. `findByComplexity()` still checks score against `[min, max]` range, but runtime dispatch no longer uses complexity for ranking.
 
 ### `src/core/dispatcher.ts` (144 lines)
 
-Concrete implementation. Extends `PipelineStep<SubTask[], TaskResult[]>`. DAG-aware parallel executor. Uses a `while` loop with `Promise.race` — launches up to `maxConcurrency` ready sub-tasks, waits for any to finish, then launches more. Detects deadlocked cycles (no ready tasks + nothing in flight → mark remaining as failed). `findAgent()` matches by tags first, then prefers complexity range match, falls back to any tag match. Returns results in original sub-task order.
+Concrete implementation. Extends `PipelineStep<SubTask[], TaskResult[]>`. DAG-aware parallel executor. Uses a `while` loop with `Promise.race` — launches up to `maxConcurrency` ready sub-tasks, waits for any to finish, then launches more. Detects deadlocked cycles (no ready tasks + nothing in flight → mark remaining as failed). `findAgent()` now routes through scored tag ranking with a minimum-acceptance threshold, then selects the highest-ranked available agent. When no agent qualifies, the failure result includes ranked-candidate diagnostics for later inspection. Returns results in original sub-task order.
 
 ### `src/core/orchestrator.ts` (183 lines)
 

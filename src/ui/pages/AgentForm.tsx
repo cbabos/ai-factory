@@ -36,12 +36,6 @@ const complexityOptions = [
 ];
 
 const metadataTextKeys = ['systemPrompt', 'outputContract', 'toolPolicy', 'notes'] as const;
-const DEFAULT_AGENT_TOKEN_PROFILE = {
-  min: 100,
-  typical: 750,
-  max: 1500,
-} as const;
-
 function stringifyMetadataValue(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
@@ -177,7 +171,6 @@ const AgentForm: React.FC<AgentFormProps> = ({
       description: formData.description.trim(),
       tags: formData.tags,
       ...complexity,
-      tokenProfile: DEFAULT_AGENT_TOKEN_PROFILE,
       timeoutMs: Math.round(formData.timeoutMinutes * 60000),
       maxRetries: formData.iterationCount,
       isActive: formData.isActive,

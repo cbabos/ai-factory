@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ConversationTurnView } from '../components/conversation/ConversationTurnView.js';
+import { RoutingDiagnosticsView } from '../components/conversation/RoutingDiagnosticsView.js';
 import { Button } from '../components/controls/Button.js';
 import { Panel } from '../components/layout/Panel.js';
 import { WorkflowArtifactList } from '../components/workflow/index.js';
@@ -130,6 +131,7 @@ const TaskDetailsPage: React.FC = () => {
 
       <Panel title="Conversation" cyber>
         <div className="flex flex-col gap-4">
+          <RoutingDiagnosticsView turns={task.conversation} />
           {task.conversation.length === 0 ? (
             <p className="text-text-secondary">No conversation captured for this task yet.</p>
           ) : (

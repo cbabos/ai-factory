@@ -33,7 +33,6 @@ function makeManifest(id: string): AgentManifest {
     id,
     tags: ["analysis"],
     complexityRange: [1, 5],
-    tokenProfile: { min: 50, max: 500, typical: 150 },
     timeoutMs: 30000,
     maxRetries: 1,
   };
@@ -51,6 +50,8 @@ function makeAgent(id: string): IAgent {
       modelId: "gpt-4o-mini",
       estimatedTokens: { min: 10, max: 100, expected: 50 },
       estimatedCost: 0.01,
+      costPer1kInput: 0.01,
+      costPer1kOutput: 0.02,
     },
     latencyMs: 10,
     retries: 0,
@@ -70,6 +71,8 @@ function makeSelector(): IModelSelector {
     modelId: "gpt-4o-mini",
     estimatedTokens: { min: 10, max: 100, expected: 50 },
     estimatedCost: 0.01,
+    costPer1kInput: 0.01,
+    costPer1kOutput: 0.02,
   };
 
   return {
@@ -201,6 +204,8 @@ describe("WorkflowEngine", () => {
         modelId: "gpt-4o-mini",
         estimatedTokens: { min: 10, max: 100, expected: 50 },
         estimatedCost: 0.01,
+        costPer1kInput: 0.01,
+        costPer1kOutput: 0.02,
       },
       latencyMs: 10,
       retries: 0,
@@ -453,6 +458,8 @@ describe("WorkflowEngine", () => {
         modelId: "gpt-4o-mini",
         estimatedTokens: { min: 10, max: 100, expected: 50 },
         estimatedCost: 0.01,
+        costPer1kInput: 0.01,
+        costPer1kOutput: 0.02,
       },
       latencyMs: 10,
       retries: 0,

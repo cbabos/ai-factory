@@ -53,6 +53,44 @@ function makeCaller(returnValue: {
   };
 }
 
+function makeRawCaller(content: string): ILLMCaller {
+  return {
+    provider: "openai",
+    call: vi.fn().mockResolvedValue({
+      content,
+      usage: { input: 100, output: 50, total: 150 },
+      model: "gpt-4o-mini",
+      provider: "openai",
+      latencyMs: 1,
+    }) as ILLMCaller["call"],
+    callStructured: vi.fn(),
+    estimateTokens: vi.fn().mockReturnValue(100),
+    listModels: vi.fn(),
+  };
+}
+
+function makeSequenceCaller(contents: string[]): ILLMCaller {
+  return {
+    provider: "openai",
+    call: vi.fn().mockImplementation(async () => {
+      const next = contents.shift();
+      if (next === undefined) {
+        throw new Error("No more mocked responses");
+      }
+      return {
+        content: next,
+        usage: { input: 100, output: 50, total: 150 },
+        model: "gpt-4o-mini",
+        provider: "openai",
+        latencyMs: 1,
+      };
+    }) as ILLMCaller["call"],
+    callStructured: vi.fn(),
+    estimateTokens: vi.fn().mockReturnValue(100),
+    listModels: vi.fn(),
+  };
+}
+
 function getCallMock(caller: ILLMCaller): CallMock {
   return caller.call as unknown as CallMock;
 }
@@ -157,6 +195,124 @@ describe("TaskDecomposer", () => {
     expect(result.subTasks[0]?.complexity.score).toBe(10);
     expect(result.subTasks[0]?.complexity.confidence).toBe(1);
     expect(result.subTasks[0]?.complexity.estimatedTokens).toEqual({ min: 50, expected: 50, max: 50 });
+  });
+
+  it("accepts JSON wrapped in markdown fences", async () => {
+    const caller = makeRawCaller(`\`\`\`json
+{
+  "subTasks": [
+    {
+      "description": "search",
+      "capabilityTags": ["search"],
+      "dependencies": [],
+      "complexity": {
+        "score": 3,
+        "confidence": 0.9,
+        "reasoning": "ok",
+        "estimatedTokens": { "min": 10, "expected": 20, "max": 30 }
+      }
+    }
+  ]
+}
+\`\`\``);
+
+    const decomposer = new TaskDecomposer(caller, "gpt-4o-mini");
+    const result = await decomposer.decompose(makeTask("find"), makeScore());
+
+    expect(result.subTasks).toHaveLength(1);
+    expect(result.subTasks[0]?.description).toBe("search");
+  });
+
+  it("rejects unsupported capability tags", async () => {
+    const caller = makeRawCaller(JSON.stringify({
+      subTasks: [
+        {
+          description: "write tests",
+          capabilityTags: ["testing"],
+          dependencies: [],
+          complexity: makeScore(),
+        },
+      ],
+    }));
+
+    const decomposer = new TaskDecomposer(caller, "gpt-4o-mini");
+
+    await expect(decomposer.decompose(makeTask("find"), makeScore())).rejects.toThrow(
+      "unsupported capability tags: testing",
+    );
+  });
+
+  it("rejects dependencies on future sub-tasks", async () => {
+    const caller = makeRawCaller(JSON.stringify({
+      subTasks: [
+        {
+          description: "implement routes",
+          capabilityTags: ["execution"],
+          dependencies: [1],
+          complexity: makeScore(),
+        },
+        {
+          description: "create auth middleware",
+          capabilityTags: ["code-generation"],
+          dependencies: [],
+          complexity: makeScore(),
+        },
+      ],
+    }));
+
+    const decomposer = new TaskDecomposer(caller, "gpt-4o-mini");
+
+    await expect(decomposer.decompose(makeTask("find"), makeScore())).rejects.toThrow(
+      "depends on future sub-task 1",
+    );
+  });
+
+  it("retries when the first decomposition response contains malformed JSON", async () => {
+    const caller = makeSequenceCaller([
+      "{\"subTasks\":[{\"description\":\"broken\"",
+      JSON.stringify({
+        subTasks: [
+          {
+            description: "search",
+            capabilityTags: ["search"],
+            dependencies: [],
+            complexity: makeScore(),
+          },
+        ],
+      }),
+    ]);
+
+    const decomposer = new TaskDecomposer(caller, "gpt-4o-mini");
+    const result = await decomposer.decompose(makeTask("find"), makeScore());
+
+    expect(result.subTasks).toHaveLength(1);
+    expect(getCallMock(caller).mock.calls).toHaveLength(2);
+    expect(result.conversation.some((turn) => turn.metadata?.phase === "decomposition-retry")).toBe(true);
+  });
+
+  it("repairs malformed JSON after retries are exhausted", async () => {
+    const repaired = JSON.stringify({
+      subTasks: [
+        {
+          description: "search",
+          capabilityTags: ["search"],
+          dependencies: [],
+          complexity: makeScore(),
+        },
+      ],
+    });
+    const caller = makeSequenceCaller([
+      "{\"subTasks\":[{\"description\":\"broken\"",
+      "{\"subTasks\":[{\"description\":\"still broken\"",
+      repaired,
+    ]);
+
+    const decomposer = new TaskDecomposer(caller, "gpt-4o-mini");
+    const result = await decomposer.decompose(makeTask("find"), makeScore());
+
+    expect(result.subTasks).toHaveLength(1);
+    expect(getCallMock(caller).mock.calls).toHaveLength(3);
+    expect(result.conversation.some((turn) => turn.metadata?.phase === "decomposition-repair")).toBe(true);
   });
 
   it("includes a conversation log", async () => {

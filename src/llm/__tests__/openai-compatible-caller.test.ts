@@ -53,9 +53,13 @@ describe("OpenAICompatibleCaller", () => {
       usage: { prompt_tokens: 1, completion_tokens: 1 },
     });
 
-    const result = await caller.call("hi", { model: "mistral-small", provider: "mistral" });
+    const result = await caller.call("hi", { model: "mistral-small", provider: "mistral", responseFormat: "json" });
     expect(result.provider).toBe("mistral");
     expect(result.content).toBe("ok");
+
+    const call = fakeClient.chat.completions.create.mock.calls[0];
+    const callArgs = call?.[0] as Record<string, unknown>;
+    expect(callArgs.response_format).toEqual({ type: "json_object" });
   });
 
   it("lists models with the configured provider", async () => {

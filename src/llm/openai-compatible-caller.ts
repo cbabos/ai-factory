@@ -31,6 +31,10 @@ export class OpenAICompatibleCaller extends LLMCaller implements ILLMCaller {
           messages,
           temperature: options.temperature,
           max_tokens: options.maxTokens,
+          response_format:
+            options.responseFormat === "json"
+              ? { type: "json_object" }
+              : undefined,
           stop: options.stopSequences,
         },
         { timeout: options.timeoutMs ?? 60_000 },

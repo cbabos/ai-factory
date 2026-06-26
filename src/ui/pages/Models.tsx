@@ -36,6 +36,7 @@ const formatSourceLabel = (configSource: ModelRecord['configSource']): string =>
 
 const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
   const [models, setModels] = useState<ModelRecord[]>([]);
+  const [availableModels, setAvailableModels] = useState<ModelRecord[]>([]);
   const [tags, setTags] = useState<TagRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,11 +52,13 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
     setLoading(true);
     setError(null);
     try {
-      const [modelData, tagData] = await Promise.all([
+      const [modelData, availableModelData, tagData] = await Promise.all([
         apiClient.listModels(),
+        apiClient.listAvailableModels(),
         apiClient.listTags(),
       ]);
       setModels(modelData);
+      setAvailableModels(availableModelData);
       setTags(tagData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -482,7 +485,7 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
       {isFormOpen && (
         <ModelForm
           model={editingModel}
-          availableModels={models}
+          availableModels={availableModels}
           availableTags={tags}
           onClose={() => {
             setIsFormOpen(false);
@@ -497,11 +500,11 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
           <div className="bg-panel border border-accent-danger/50 rounded-cyber shadow-[0_0_30px_rgba(255,49,49,0.3)] max-w-md w-full p-6 animate-[fade-in_200ms_ease-out]">
             <h3 className="text-xl font-bold text-accent-danger mb-2">Delete Model?</h3>
             <p className="text-text-secondary mb-4">
-              Are you sure you want to soft delete <strong>{deleteConfirm.modelId}</strong> from{' '}
+              Are you sure you want to permanently delete <strong>{deleteConfirm.modelId}</strong> from{' '}
               <strong>{deleteConfirm.provider}</strong>?
             </p>
             <p className="text-sm text-text-muted mb-6 italic">
-              Note: This is a soft delete. The model will be marked as inactive but not permanently removed.
+              Note: This action is final and will remove the model record from the system.
             </p>
             <div className="flex items-center justify-end gap-3">
               <Button

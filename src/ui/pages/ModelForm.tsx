@@ -4,7 +4,7 @@ import { MultiSelect } from '../components/forms/MultiSelect.js';
 import { Select } from '../components/forms/Select.js';
 import { Button } from '../components/common/Button.js';
 import type { Provider } from '../../core/types.js';
-import type { ModelRecord, TagRecord } from '../services/index.js';
+import { apiClient, type ModelRecord, type TagRecord } from '../services/index.js';
 
 interface ModelFormState {
   provider: Provider;
@@ -46,6 +46,7 @@ export const ModelForm: React.FC<ModelFormProps> = ({
   onSubmit,
 }) => {
   const [formData, setFormData] = useState<ModelFormState>(defaultState);
+  const [providerModels, setProviderModels] = useState<ModelRecord[]>(availableModels);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -58,7 +59,7 @@ export const ModelForm: React.FC<ModelFormProps> = ({
 
   const availableModelOptions = Array.from(
     new Map(
-      availableModels
+      providerModels
         .filter((availableModel) => availableModel.provider === formData.provider)
         .sort((left, right) => left.modelId.localeCompare(right.modelId))
         .map((availableModel) => [
@@ -70,6 +71,10 @@ export const ModelForm: React.FC<ModelFormProps> = ({
         ]),
     ).values(),
   );
+
+  useEffect(() => {
+    setProviderModels(availableModels);
+  }, [availableModels]);
 
   useEffect(() => {
     if (model) {
@@ -95,6 +100,29 @@ export const ModelForm: React.FC<ModelFormProps> = ({
       }));
     }
   }, [model, providerOptions]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProviderModels() {
+      try {
+        const discoveredModels = await apiClient.listAvailableModels(formData.provider);
+        if (!cancelled) {
+          setProviderModels(discoveredModels);
+        }
+      } catch {
+        if (!cancelled) {
+          setProviderModels(availableModels);
+        }
+      }
+    }
+
+    void loadProviderModels();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [formData.provider, availableModels]);
 
   useEffect(() => {
     if (availableModelOptions.length === 0) {

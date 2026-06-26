@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import type { IModelStore, ModelRecord } from "../model-store.js";
 import type { Provider } from "../types.js";
 import { ApiError } from "../api-types.js";
+import type { ModelCatalog } from "../model-catalog.js";
 
 // ─── Helper Functions ──────────────────────────────────────────────────────
 
@@ -33,6 +34,7 @@ export async function listModels(
 ): Promise<void> {
   try {
     const store = req.app.get("modelStore") as IModelStore;
+    const modelCatalog = req.app.get("modelCatalog") as ModelCatalog | undefined;
     const filter = req.query as Record<string, unknown>;
 
     let models: ModelRecord[] = [];
@@ -54,6 +56,48 @@ export async function listModels(
     const capabilityFilter = filter.capability as string | undefined;
     if (capabilityFilter) {
       models = models.filter((m) => m.capabilities.includes(capabilityFilter));
+    }
+
+    const includeDiscovered = filter.includeDiscovered === true || filter.includeDiscovered === "true";
+    if (includeDiscovered && modelCatalog) {
+      const discoveredEntries = await modelCatalog.discoverAll();
+      const existingById = new Map(models.map((model) => [model.id, model]));
+
+      for (const entry of discoveredEntries) {
+        const id = `${entry.discovered.provider}:${entry.discovered.modelId}`;
+        if (existingById.has(id)) {
+          continue;
+        }
+
+        const merged: ModelRecord = {
+          id,
+          provider: entry.discovered.provider,
+          modelId: entry.discovered.modelId,
+          maxTokens: entry.enriched?.maxTokens ?? 4096,
+          costPer1kInput: entry.enriched?.costPer1kInput ?? 0.001,
+          costPer1kOutput: entry.enriched?.costPer1kOutput ?? 0.001,
+          capabilities: entry.enriched?.capabilities ?? [],
+          ownedBy: entry.discovered.ownedBy,
+          version: 0,
+          isActive: true,
+          discoveredAt: Date.now(),
+          configSource: "discovered",
+          createdAt: 0,
+          updatedAt: 0,
+        };
+
+        existingById.set(id, merged);
+      }
+
+      models = [...existingById.values()];
+
+      if (providerFilter) {
+        models = models.filter((m) => m.provider === providerFilter);
+      }
+
+      if (capabilityFilter) {
+        models = models.filter((m) => m.capabilities.includes(capabilityFilter));
+      }
     }
 
     const total = models.length;
@@ -177,7 +221,7 @@ export async function deleteModel(
       throw new ApiError("Model not found", { statusCode: 404 });
     }
 
-    store.softDelete(provider as string, modelId as string);
+    store.delete(provider as string, modelId as string);
     res.status(204).send();
   } catch (error) {
     next(error);

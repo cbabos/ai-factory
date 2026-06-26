@@ -158,6 +158,15 @@ export const apiClient = {
     return response.data;
   },
 
+  async listAvailableModels(provider?: string): Promise<ModelRecord[]> {
+    const params = new URLSearchParams({ includeDiscovered: 'true' });
+    if (provider) {
+      params.set('provider', provider);
+    }
+    const response = await requestJson<ApiListEnvelope<ModelRecord>>(`${API_ENDPOINTS.models}?${params.toString()}`);
+    return response.data;
+  },
+
   async listTags(includeInactive = true): Promise<TagRecord[]> {
     const suffix = includeInactive ? '' : '?isActive=true';
     const response = await requestJson<ApiListEnvelope<TagRecord>>(`${API_ENDPOINTS.tags}${suffix}`);

@@ -322,6 +322,9 @@ export class ApiServer {
     if (this.modelStore) {
       this.app.set("modelStore", this.modelStore);
     }
+    if (this.modelCatalog) {
+      this.app.set("modelCatalog", this.modelCatalog);
+    }
     if (this.tagStore) {
       this.app.set("tagStore", this.tagStore);
     }

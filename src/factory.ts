@@ -247,6 +247,15 @@ export class AIFactory {
   async initialize(): Promise<void> {
     this.ensureDefaultTagsPersisted();
 
+    const runtimeModels = this.resolveRuntimeModels(this.config.models);
+    this.baseCatalogModels = runtimeModels;
+
+    const catalog = new ModelCatalog(
+      [...this.callers.values()],
+      runtimeModels,
+      this.logger,
+    );
+
     if (this.apiServer) {
       await this.apiServer.initialize(
         this.agentStore,
@@ -258,7 +267,7 @@ export class AIFactory {
         this.humanTaskRepository,
         this.artifactRepository,
         this.agentRegistry,
-        undefined,
+        catalog,
         this.tracer,
         this.budgetTracker,
         async (humanTaskId, response) => this.respondToHumanTask(humanTaskId, response),
@@ -266,15 +275,6 @@ export class AIFactory {
         (event) => this.syncRuntimeAgents(event),
       );
     }
-
-    const runtimeModels = this.resolveRuntimeModels(this.config.models);
-    this.baseCatalogModels = runtimeModels;
-
-    const catalog = new ModelCatalog(
-      [...this.callers.values()],
-      runtimeModels,
-      this.logger,
-    );
 
     let discovered: { provider: string; modelId: string; ownedBy?: string }[] = [];
     try {

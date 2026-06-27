@@ -191,6 +191,26 @@ describe("AIFactory integration", () => {
     })).not.toThrow();
   });
 
+  it("does not activate discovered models until they are explicitly configured", async () => {
+    const factory = new AIFactory({
+      config: makeConfigWithoutModels(),
+      secrets: makeSecrets(),
+      callers: new Map([["openai", makeFakeCaller()]]),
+      logger: new NoopLogger(),
+    });
+
+    await factory.initialize();
+
+    const currentCatalog = (factory as unknown as {
+      currentCatalog: Array<{
+        provider: string;
+        modelId: string;
+      }>;
+    }).currentCatalog;
+
+    expect(currentCatalog).toEqual([]);
+  });
+
   it("keeps estimator model paired with its provider instead of the first caller", async () => {
     const taskRepository = new InMemoryTaskRepository();
     const ollamaCaller = makeProviderCaller("ollama");

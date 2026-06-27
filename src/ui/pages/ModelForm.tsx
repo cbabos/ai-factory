@@ -246,7 +246,7 @@ export const ModelForm: React.FC<ModelFormProps> = ({
             onChange={(e) => handleChange('modelId', e.target.value)}
             options={availableModelOptions}
             error={errors.modelId}
-            helpText="Auto-discovered models for the selected provider."
+            helpText="Discovered models for the selected provider. Choosing one here adds it to your managed catalog."
             cyberBorder
           />
 

@@ -295,7 +295,6 @@ export class AIFactory {
         modelId: e.discovered.modelId,
         ownedBy: e.discovered.ownedBy,
       }));
-      this.persistDiscoveredModels(discovered);
       this.logger.info(`Discovered ${discovered.length} model(s): ${discovered.map((m) => `${m.provider}:${m.modelId}`).join(", ") || "none"}`);
     } catch (err) {
       this.logger.warn(
@@ -304,12 +303,11 @@ export class AIFactory {
       );
     }
 
-    const mergedCatalog = this.buildMergedCatalog(discovered);
-    this.currentCatalog = mergedCatalog;
-    this.updateEstimatorSelection(mergedCatalog);
+    this.currentCatalog = runtimeModels;
+    this.updateEstimatorSelection(runtimeModels);
 
-    this.orchestrator = this.buildOrchestrator(mergedCatalog);
-    this.workflowEngine = this.buildWorkflowEngine(mergedCatalog);
+    this.orchestrator = this.buildOrchestrator(runtimeModels);
+    this.workflowEngine = this.buildWorkflowEngine(runtimeModels);
   }
 
   private ensureDefaultSettingsPersisted(): void {
@@ -511,37 +509,6 @@ export class AIFactory {
 
   getHealthChecker(): HealthChecker {
     return this.healthChecker;
-  }
-
-  private buildMergedCatalog(
-    discovered: { provider: string; modelId: string; ownedBy?: string }[],
-  ): ModelInfo[] {
-    const staticByKey = new Map(
-      this.baseCatalogModels.map((m) => [`${m.provider}:${m.modelId}`, m]),
-    );
-
-    // Static config defines authoritative capabilities, cost, and priority.
-    // Preserve that order first.
-    const ordered: ModelInfo[] = [...this.baseCatalogModels];
-    const added = new Set<string>(staticByKey.keys());
-
-    // Append genuinely new discovered models at the end with conservative
-    // defaults so they do not accidentally outrank configured models.
-    for (const d of discovered) {
-      const key = `${d.provider}:${d.modelId}`;
-      if (added.has(key)) continue;
-      added.add(key);
-      ordered.push({
-        provider: d.provider as Provider,
-        modelId: d.modelId,
-        maxTokens: 4096,
-        costPer1kInput: 0.001,
-        costPer1kOutput: 0.001,
-        capabilities: ["analysis"],
-      });
-    }
-
-    return ordered;
   }
 
   private buildOrchestrator(catalog: ModelInfo[]): Orchestrator {
@@ -965,34 +932,6 @@ export class AIFactory {
       }));
 
     return storedModels.length > 0 ? storedModels : normalizedFallbackModels;
-  }
-
-  private persistDiscoveredModels(
-    discovered: { provider: string; modelId: string; ownedBy?: string }[],
-  ): void {
-    if (!this.modelStore) {
-      return;
-    }
-
-    const discoveredAt = Date.now();
-
-    for (const model of discovered) {
-      if (this.modelStore.get(model.provider, model.modelId)) {
-        continue;
-      }
-
-      this.modelStore.save({
-        provider: model.provider,
-        modelId: model.modelId,
-        maxTokens: 4096,
-        costPer1kInput: 0.001,
-        costPer1kOutput: 0.001,
-        capabilities: ["analysis"],
-        ownedBy: model.ownedBy,
-        configSource: "discovered",
-        discoveredAt,
-      });
-    }
   }
 
   private async onSignal(raw: {

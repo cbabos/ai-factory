@@ -311,7 +311,7 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ className }) => {
         <div className="flex flex-col items-center justify-center py-16 text-text-secondary">
           <div className="text-6xl mb-4 opacity-20">🤖</div>
           <p className="text-lg mb-2">No models found</p>
-          <p className="text-sm mb-6">No discovered or managed models are currently available</p>
+          <p className="text-sm mb-6">No configured models are currently available. Use Add Model to choose one from the discovered provider catalog.</p>
           <Button variant="cyber" onClick={handleAddNew} startIcon="＋">
             Add First Model
           </Button>

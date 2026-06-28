@@ -17,11 +17,6 @@ The project now includes a first-class workflow runtime with:
 - a visual workflow editor and run detail UI
 - human task inbox and approval/clarification resume flow
 - task-scoped workflow artifacts saved under `out/artifacts/<taskId>/...`
-- seeded workflow `requirements-clarify-and-approve@2` that:
-  - drafts a structured markdown requirements document
-  - derives machine-readable open questions
-  - renders clarification requests as questionnaire fields plus bulk answer fallback
-  - exposes generated documents to approvers through the UI
 
 Current workflow APIs include:
 

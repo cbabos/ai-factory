@@ -244,7 +244,7 @@ describe('apiClient', () => {
             description: 'Launch deterministic workflow',
             priority: 'high',
             origin: { channel: 'api' },
-            workflow: { workflowId: 'implement-test-review', workflowVersion: 1 },
+            workflow: { workflowId: 'custom-workflow', workflowVersion: 1 },
           },
           status: 'pending',
           createdAt: 100,
@@ -257,7 +257,7 @@ describe('apiClient', () => {
       description: 'Launch deterministic workflow',
       priority: 'high',
       context: { repo: 'ai-factory' },
-      workflowId: 'implement-test-review',
+      workflowId: 'custom-workflow',
       workflowVersion: 1,
     });
 
@@ -270,12 +270,12 @@ describe('apiClient', () => {
           description: 'Launch deterministic workflow',
           priority: 'high',
           context: { repo: 'ai-factory' },
-          workflowId: 'implement-test-review',
+          workflowId: 'custom-workflow',
           workflowVersion: 1,
         }),
       }),
     );
-    expect(result.workflowId).toBe('implement-test-review');
+    expect(result.workflowId).toBe('custom-workflow');
     expect(result.workflowVersion).toBe(1);
   });
 
@@ -311,4 +311,44 @@ describe('apiClient', () => {
       },
     });
   });
+
+  it('resubmits a failed task through the resubmit endpoint', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 201,
+      statusText: 'Created',
+      json: async () => ({
+        data: {
+          id: 'task-resubmit-1',
+          task: {
+            id: 'task-resubmit-1',
+            description: 'Retry me',
+            priority: 'high',
+            origin: { channel: 'api' },
+            context: { resubmittedFrom: 'task-failed-1' },
+            workflow: { workflowId: 'custom-workflow', workflowVersion: 1 },
+            createdAt: 200,
+          },
+          status: 'pending',
+          createdAt: 200,
+          updatedAt: 200,
+        },
+      }),
+    } as Response);
+
+    const result = await apiClient.resubmitTask('task-failed-1');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3001/api/tasks/task-failed-1/resubmit',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    expect(result.id).toBe('task-resubmit-1');
+    expect(result.status).toBe('pending');
+    expect(result.workflowId).toBe('custom-workflow');
+    expect(result.workflowVersion).toBe(1);
+  });
+
 });

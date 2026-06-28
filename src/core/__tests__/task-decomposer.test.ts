@@ -393,4 +393,42 @@ describe("TaskDecomposer", () => {
     expect(result.conversation[1]?.role).toBe("user");
     expect(result.conversation[2]?.role).toBe("model");
   });
+
+  it("extracts the first valid JSON object when the model repeats it", async () => {
+    const caller = makeRawCaller(
+      JSON.stringify({
+        subTasks: [
+          {
+            description: "first",
+            capabilityTags: ["file-io"],
+            dependencies: [],
+            complexity: { score: 2, confidence: 0.9, reasoning: "easy", estimatedTokens: { min: 1, max: 2, expected: 1 } },
+          },
+        ],
+      }) +
+      JSON.stringify({
+        subTasks: [
+          {
+            description: "second",
+            capabilityTags: ["file-io"],
+            dependencies: [],
+            complexity: { score: 3, confidence: 0.8, reasoning: "also easy", estimatedTokens: { min: 1, max: 2, expected: 1 } },
+          },
+        ],
+      }),
+    );
+
+    const decomposer = new TaskDecomposer(
+      caller,
+      "gpt-4o-mini",
+      () => ["file-io"],
+      "openai",
+    );
+
+    const result = await decomposer.decompose(makeTask("repeat"), makeScore());
+    expect(result.subTasks).toHaveLength(1);
+    expect(result.subTasks[0]?.description).toBe("first");
+  });
+
+
 });

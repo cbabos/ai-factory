@@ -188,3 +188,51 @@ export async function createTask(
     next(error);
   }
 }
+
+export async function resubmitTask(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const repository = req.app.get("taskRepository") as ITaskRepository;
+    const submitter = req.app.get("taskSubmitter") as ((input: Record<string, unknown>) => Promise<Task>) | undefined;
+    if (!submitter) {
+      throw new ApiError("Task submission is not configured", { statusCode: 501 });
+    }
+
+    const { id } = req.params;
+    const record = await repository.get(id as string);
+    if (!record) {
+      throw new ApiError("Task not found", { statusCode: 404 });
+    }
+
+    if (record.status !== "failed" && record.status !== "cancelled") {
+      throw new ApiError("Only failed or cancelled tasks can be resubmitted", { statusCode: 409 });
+    }
+
+    const original = record.task;
+    const context = structuredClone(original.context);
+    context.resubmittedFrom = original.id;
+
+    const task = await submitter({
+      description: original.description,
+      priority: original.priority,
+      context,
+      workflowId: original.workflow?.workflowId,
+      workflowVersion: original.workflow?.workflowVersion,
+    });
+
+    res.status(201).json({
+      data: {
+        id: task.id,
+        task,
+        status: "pending",
+        createdAt: task.createdAt,
+        updatedAt: task.createdAt,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}

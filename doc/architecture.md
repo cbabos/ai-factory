@@ -813,25 +813,9 @@ This is how the system supports **both local and cloud model discovery**: local 
 
 Simple secrets abstraction. `SecretsProvider` interface with a single `get(key)` method. `EnvSecretsProvider` reads from `process.env`. Used by `AIFactory` to load API keys for cloud providers.
 
-### `src/agents/search-agent.ts`
+### `src/agents/configurable-agent.ts`
 
-Concrete agent. Capabilities: `search`, `codebase`, `read-only`. Handles simple lookup and codebase search tasks. Extends `Agent` and implements `buildPrompt()`, `buildSystemPrompt()`, `parseOutput()`.
-
-### `src/agents/analysis-agent.ts`
-
-Concrete agent. Capabilities: `analysis`, `reasoning`. Handles moderate-to-complex reasoning, pattern detection, and risk assessment.
-
-### `src/agents/summarizer-agent.ts`
-
-Concrete agent. Capabilities: `summarization`, `synthesis`. Condenses inputs into concise outputs.
-
-### `src/agents/executor-agent.ts`
-
-Concrete agent. Capabilities: `execution`, `code-generation`, `write`. Generates and executes code/commands.
-
-### `src/agents/file-io-agent.ts`
-
-Concrete agent. Capabilities: `file-io`, `read-only`, `write`. Reads, writes, and lists files.
+The only concrete agent implementation. It is configured entirely through the agent store (or a static manifest): tags, complexity range, timeout, retries, description, and metadata such as `systemPrompt`, `promptTemplate`, `outputContract`, `toolPolicy`, and `outputMode`. Extends `Agent` and uses the shared LLM/tool loop, so any behavior previously hardcoded in per-agent classes is now driven by database configuration.
 
 ### `src/factory.ts`
 

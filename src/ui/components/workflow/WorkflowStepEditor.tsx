@@ -370,7 +370,7 @@ function renderTypeSpecificFields(
             workflowVersion: step.workflow?.workflowVersion,
           },
         })}
-        placeholder="requirements-clarify-and-approve"
+        placeholder="my-workflow"
       />
       <Input
         label="Workflow Version"

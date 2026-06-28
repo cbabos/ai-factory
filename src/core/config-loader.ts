@@ -1,43 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import type { AgentManifest, FactoryConfig } from "./types.js";
 
-const DEFAULT_AGENT_MANIFESTS: AgentManifest[] = [
-  {
-    id: "search-agent",
-    tags: ["search", "codebase", "read-only", "analysis", "synthesis", "reasoning", "listDir"],
-    complexityRange: [1, 10],
-    timeoutMs: 30000,
-    maxRetries: 2,
-  },
-  {
-    id: "analysis-agent",
-    tags: ["analysis", "reasoning", "summarization", "synthesis"],
-    complexityRange: [1, 10],
-    timeoutMs: 60000,
-    maxRetries: 2,
-  },
-  {
-    id: "summarizer-agent",
-    tags: ["summarization", "synthesis", "analysis", "reasoning"],
-    complexityRange: [1, 10],
-    timeoutMs: 30000,
-    maxRetries: 1,
-  },
-  {
-    id: "executor-agent",
-    tags: ["execution", "code-generation", "write", "synthesis", "file-io", "read-only"],
-    complexityRange: [1, 10],
-    timeoutMs: 120000,
-    maxRetries: 1,
-  },
-  {
-    id: "file-io-agent",
-    tags: ["file-io", "read-only", "write", "listDir", "search", "codebase"],
-    complexityRange: [1, 10],
-    timeoutMs: 15000,
-    maxRetries: 2,
-  },
-];
+const DEFAULT_AGENT_MANIFESTS: AgentManifest[] = [];
 
 export const DEFAULT_FACTORY_CONFIG: Required<FactoryConfig> = {
   complexity: {

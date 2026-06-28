@@ -306,13 +306,13 @@ SLACK_SIGNING_SECRET=...
 {
   "agents": [
     {
-      "id": "search-agent",
+      "id": "custom-search",
       "name": "SearchAgent",
       "model": "gpt-4",
       "capabilities": ["search", "web", "analysis"]
     },
     {
-      "id": "executor-agent",
+      "id": "custom-executor",
       "name": "ExecutorAgent",
       "model": "claude-3-opus",
       "capabilities": ["shell", "file", "execution"]

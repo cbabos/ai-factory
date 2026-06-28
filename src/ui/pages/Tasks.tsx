@@ -361,6 +361,16 @@ export default function Tasks() {
     void fetchTasks(currentPage);
   };
 
+  const handleResubmitTask = useCallback(async (taskId: string) => {
+    try {
+      const newTask = await apiClient.resubmitTask(taskId);
+      await fetchTasks(currentPage, false);
+      updateSearchParam('task', newTask.id, '');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resubmit task');
+    }
+  }, [apiClient, currentPage, fetchTasks, updateSearchParam]);
+
   const statusCounts = useMemo(() => {
     return tasks.reduce<Record<TaskListItem['status'], number>>(
       (counts, task) => ({
@@ -562,6 +572,16 @@ export default function Tasks() {
                               Run
                             </Button>
                           ) : null}
+                          {(task.status === 'failed' || task.status === 'cancelled') ? (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => handleResubmitTask(task.id)}
+                              className="px-2"
+                            >
+                              Resubmit
+                            </Button>
+                          ) : null}
                         </div>
                       </div>
 
@@ -627,6 +647,16 @@ export default function Tasks() {
                               onClick={() => navigate(appRoutes.workflowRunDetails.replace(':runId', task.workflowRunId!))}
                             >
                               Run
+                            </Button>
+                          ) : null}
+                          {(task.status === 'failed' || task.status === 'cancelled') ? (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() => handleResubmitTask(task.id)}
+                            >
+                              Resubmit
                             </Button>
                           ) : null}
                         </div>

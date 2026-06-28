@@ -121,7 +121,7 @@ describe("ComplexityEstimator", () => {
     const options = callArgs?.[1] as LLMCallOptions;
     expect(options.model).toBe("gpt-4o-mini");
     expect(options.temperature).toBe(0.1);
-    expect(options.maxTokens).toBe(600);
+    expect(options.maxTokens).toBe(32768);
     expect(options.responseFormat).toBe("json");
   });
 

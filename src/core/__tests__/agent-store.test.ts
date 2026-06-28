@@ -27,7 +27,7 @@ describe("SQLiteAgentStore", () => {
     const store = createStore();
 
     const created = store.save({
-      id: "analysis-agent",
+      id: "test-agent",
       name: "Analysis Agent",
       tags: ["analysis"],
       complexityMin: 2,
@@ -39,12 +39,12 @@ describe("SQLiteAgentStore", () => {
       metadata: { systemPrompt: "Analyze carefully." },
     });
 
-    expect(created.id).toBe("analysis-agent");
+    expect(created.id).toBe("test-agent");
     expect(created.timeoutMs).toBe(60000);
     expect(created.maxRetries).toBe(3);
     expect(store.getAll()).toHaveLength(1);
 
-    const updated = store.update("analysis-agent", {
+    const updated = store.update("test-agent", {
       timeoutMs: 90000,
       maxRetries: 4,
       tags: ["analysis", "reasoning"],

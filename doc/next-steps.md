@@ -13,10 +13,6 @@
   - workflow graph view
   - run detail and human task inbox
   - task-scoped artifact persistence and review links
-- Seeded workflow `requirements-clarify-and-approve@2` now emits:
-  - markdown draft/final requirement documents as artifacts
-  - structured open questions for human clarification
-  - questionnaire-mode human tasks with bulk fallback
 
 ## What’s Complete
 

@@ -49,14 +49,7 @@ import {
   createGroqCaller,
   createDeepseekCaller,
 } from "./llm/index.js";
-import {
-  ConfigurableAgent,
-  SearchAgent,
-  AnalysisAgent,
-  SummarizerAgent,
-  ExecutorAgent,
-  FileIOAgent,
-} from "./agents/index.js";
+import { ConfigurableAgent } from "./agents/index.js";
 import type { IToolRegistry } from "./tools/interfaces.js";
 import type { ITaskRepository } from "./core/task-repository.js";
 import type {
@@ -72,7 +65,6 @@ import { SQLiteTagStore } from "./core/tag-store.js";
 import { SQLiteConfigStore } from "./core/sqlite-config-store.js";
 import { ApiServer } from "./core/api-server.js";
 import { setSettingsStore as setupSettingsStore } from "./core/api-handlers/settings.js";
-import type { AgentRecord, CreateAgentInput } from "./core/agent-store.js";
 import type { AgentRuntimeSync, ModelRuntimeSync } from "./core/api-types.js";
 import { normalizeFactoryConfig } from "./core/config-loader.js";
 
@@ -495,6 +487,34 @@ export class AIFactory {
     return task;
   }
 
+  async resubmitTask(taskId: string): Promise<Task> {
+    if (!this.taskRepository) {
+      throw new Error("Task repository is not configured");
+    }
+
+    const record = await this.taskRepository.get(taskId);
+    if (!record) {
+      throw new Error(`Task ${taskId} not found`);
+    }
+
+    if (record.status !== "failed" && record.status !== "cancelled") {
+      throw new Error(`Task ${taskId} cannot be resubmitted: status is ${record.status}`);
+    }
+
+    const original = record.task;
+    const context = structuredClone(original.context);
+    context.resubmittedFrom = original.id;
+
+    return this.submitApiTask({
+      description: original.description,
+      priority: original.priority,
+      context,
+      workflowId: original.workflow?.workflowId,
+      workflowVersion: original.workflow?.workflowVersion,
+    });
+  }
+
+
   getEventBus(): EventBus {
     return this.eventBus;
   }
@@ -823,79 +843,33 @@ export class AIFactory {
     }
     this.agents.clear();
 
+    const caller = this.routingCaller ?? this.defaultCaller;
     for (const manifest of runtimeAgents) {
       this.agentRegistry.register(manifest);
-      const configuredAgent = this.buildConfigurableAgentFromStore(manifest.id);
-      const executable = configuredAgent ?? this.buildBuiltinAgent(manifest.id, this.routingCaller ?? this.defaultCaller, this.tools);
-      if (executable) {
-        this.agents.set(manifest.id, executable);
-      }
+      this.agents.set(manifest.id, this.buildConfigurableAgent(manifest, caller));
     }
   }
 
-  private buildConfigurableAgentFromStore(agentId: string): IAgent | undefined {
-    if (!this.agentStore || !this.routingCaller) {
-      return undefined;
-    }
-
-    const record = this.agentStore.get(agentId);
-    if (!record || !record.isActive) {
-      return undefined;
-    }
-
-    if (this.isBuiltinAgentId(agentId)) {
-      return undefined;
-    }
-
+  private buildConfigurableAgent(
+    manifest: Required<FactoryConfig>["agents"][number],
+    caller: ILLMCaller,
+  ): IAgent {
+    const record = this.agentStore?.get(manifest.id);
     return new ConfigurableAgent(
-      this.agentRecordToCreateInput(record),
-      this.routingCaller,
+      {
+        id: manifest.id,
+        name: record?.name ?? manifest.id,
+        tags: record?.tags ?? manifest.tags,
+        complexityMin: record?.complexityMin ?? manifest.complexityRange[0],
+        complexityMax: record?.complexityMax ?? manifest.complexityRange[1],
+        timeoutMs: record?.timeoutMs ?? manifest.timeoutMs,
+        maxRetries: record?.maxRetries ?? manifest.maxRetries,
+        description: record?.description,
+        metadata: record?.metadata,
+      },
+      caller,
       this.tools,
     );
-  }
-
-  private agentRecordToCreateInput(record: AgentRecord): CreateAgentInput & { description?: string; metadata?: Record<string, unknown> } {
-    return {
-      id: record.id,
-      name: record.name,
-      tags: record.tags,
-      complexityMin: record.complexityMin,
-      complexityMax: record.complexityMax,
-      timeoutMs: record.timeoutMs,
-      maxRetries: record.maxRetries,
-      configSource: record.configSource,
-      description: record.description,
-      metadata: record.metadata,
-    };
-  }
-
-  private isBuiltinAgentId(agentId: string): boolean {
-    return agentId === "search-agent"
-      || agentId === "analysis-agent"
-      || agentId === "summarizer-agent"
-      || agentId === "executor-agent"
-      || agentId === "file-io-agent";
-  }
-
-  private buildBuiltinAgent(
-    agentId: string,
-    caller: ILLMCaller,
-    tools?: IToolRegistry,
-  ): IAgent | undefined {
-    switch (agentId) {
-      case "search-agent":
-        return new SearchAgent(caller, tools);
-      case "analysis-agent":
-        return new AnalysisAgent(caller, tools);
-      case "summarizer-agent":
-        return new SummarizerAgent(caller, tools);
-      case "executor-agent":
-        return new ExecutorAgent(caller, tools);
-      case "file-io-agent":
-        return new FileIOAgent(caller, tools);
-      default:
-        return undefined;
-    }
   }
 
   private resolveRuntimeModels(fallbackModels: Required<FactoryConfig>["models"]): ModelInfo[] {

@@ -66,8 +66,8 @@ describe("Dispatcher", () => {
       latencyMs: 5,
       retries: 0,
     };
-    const agent = makeAgent("search-agent", ["search"], [1, 4], result);
-    const dispatcher = new Dispatcher(registry, new Map([["search-agent", agent]]), 5);
+    const agent = makeAgent("searcher", ["search"], [1, 4], result);
+    const dispatcher = new Dispatcher(registry, new Map([["searcher", agent]]), 5);
     registry.register(agent.manifest);
     const subTask = makeSubTask("s1", ["search"]);
     const results = await dispatcher.execute([subTask]);

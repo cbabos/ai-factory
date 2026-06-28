@@ -1,5 +1,5 @@
 import type { Task, ComplexityScore, TokenEstimate, ConversationTurn } from "./types.js";
-import type { ITaskDecomposer, ILLMCaller, DecompositionResult } from "./interfaces.js";
+import type { ITaskDecomposer, ILLMCaller, DecompositionResult, LLMCallOptions } from "./interfaces.js";
 import { getDefaultCapabilityTagIds } from "./tag-vocabulary.js";
 
 interface DecomposedSubTask {
@@ -75,14 +75,17 @@ export class TaskDecomposer implements ITaskDecomposer {
     let lastError: Error | undefined;
 
     for (let attempt = 1; attempt <= TaskDecomposer.MAX_PARSE_ATTEMPTS; attempt += 1) {
-      const result = await this.llmCaller.call(prompt, {
+      
+      const llmCallOptions : LLMCallOptions = {
         model: this.decomposerModel,
         provider: this.decomposerProvider,
         systemPrompt: SYSTEM_PROMPT,
         temperature: 0.2,
-        maxTokens: 2000,
+        maxTokens: 2000, // FIXME: this should be either configurable or by default extended
         responseFormat: "json",
-      });
+      };
+      const result = await this.llmCaller.call(prompt, llmCallOptions);
+      // Why does result have triple of the content? `{"subtasks":[...]}{"subtasks":[...]}{"subtasks":[...]}` or would be even more? ... 
       conversation.push({
         role: "model",
         content: result.content,
@@ -141,10 +144,10 @@ export class TaskDecomposer implements ITaskDecomposer {
   }
 
   private parseStructured(content: string): DecompositionOutput {
-    const sanitizedContent = this.stripJsonFence(content);
+    const firstJson = this.extractFirstJsonObject(this.stripJsonFence(content));
     let parsed: unknown;
     try {
-      parsed = JSON.parse(sanitizedContent) as unknown;
+      parsed = JSON.parse(firstJson) as unknown;
     } catch (err) {
       throw new Error(`Decomposer returned invalid JSON: ${err instanceof Error ? err.message : String(err)}. Content: ${content.slice(0, 500)}`);
     }
@@ -155,6 +158,57 @@ export class TaskDecomposer implements ITaskDecomposer {
     } catch (err) {
       throw new Error(`Decomposer returned invalid structure: ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+
+  private extractFirstJsonObject(content: string): string {
+    const trimmed = content.trim();
+    // Some local/quantized models stream or repeat the JSON object multiple
+    // times inside a single completion. Take the first complete top-level
+    // value (object or array) and ignore trailing repetitions.
+    let objectDepth = 0;
+    let arrayDepth = 0;
+    let inString = false;
+    let escape = false;
+    let firstValueStart = -1;
+    for (let i = 0; i < trimmed.length; i += 1) {
+      const ch = trimmed[i];
+      if (inString) {
+        if (escape) {
+          escape = false;
+        } else if (ch === "\\") {
+          escape = true;
+        } else if (ch === '"') {
+          inString = false;
+        }
+        continue;
+      }
+      if (ch === '"') {
+        inString = true;
+        continue;
+      }
+      if (ch === "{") {
+        if (objectDepth === 0 && arrayDepth === 0) {
+          firstValueStart = i;
+        }
+        objectDepth += 1;
+      } else if (ch === "}") {
+        objectDepth -= 1;
+        if (objectDepth === 0 && arrayDepth === 0 && firstValueStart !== -1) {
+          return trimmed.slice(firstValueStart, i + 1);
+        }
+      } else if (ch === "[") {
+        if (objectDepth === 0 && arrayDepth === 0) {
+          firstValueStart = i;
+        }
+        arrayDepth += 1;
+      } else if (ch === "]") {
+        arrayDepth -= 1;
+        if (objectDepth === 0 && arrayDepth === 0 && firstValueStart !== -1) {
+          return trimmed.slice(firstValueStart, i + 1);
+        }
+      }
+    }
+    return trimmed;
   }
 
   private buildPrompt(task: Task, score: ComplexityScore): string {
@@ -186,7 +240,7 @@ Rules:
 - Do not add extra keys such as "title", "name", "description_code", "notes", or "metadata".
 - "description" must be a non-empty string.
 - "capabilityTags" must be an array using only values from the curated set above.
-- "dependencies" must be an array of integers referencing earlier sub-task indices only.
+- "dependencies" must be an array of integers referencing **earlier sub-task IDs only**.
 - "complexity" must contain exactly these keys:
   "score", "confidence", "reasoning", "estimatedTokens"
 - Do not rename fields. Use "confidence", never variants like "conf", "rating", or numeric keys such as "5".
@@ -198,96 +252,14 @@ Rules:
 - Do not wrap the response in markdown fences.
 - Do not include commentary, explanations, prose, headings, or text before or after the JSON.
 - If you are uncertain, still output the exact schema with best-effort values instead of inventing new fields.
-
-Valid examples:
-Example 1:
-{
-  "subTasks": [
-    {
-      "description": "Inspect the existing repository structure and identify the files relevant to authentication.",
-      "capabilityTags": ["codebase", "analysis", "read-only"],
-      "dependencies": [],
-      "complexity": {
-        "score": 3,
-        "confidence": 0.92,
-        "reasoning": "This is a small inspection task with no code changes.",
-        "estimatedTokens": { "min": 120, "max": 300, "expected": 180 }
-      }
-    }
-  ]
-}
-
-Example 2:
-{
-  "subTasks": [
-    {
-      "description": "Create the project directory and initialize the Node.js application with the required dependencies.",
-      "capabilityTags": ["file-io", "execution", "code-generation"],
-      "dependencies": [],
-      "complexity": {
-        "score": 4,
-        "confidence": 0.88,
-        "reasoning": "Project bootstrap is straightforward but touches filesystem and package setup.",
-        "estimatedTokens": { "min": 180, "max": 420, "expected": 280 }
-      }
-    },
-    {
-      "description": "Define the initial database schema and data models for products, users, and orders.",
-      "capabilityTags": ["code-generation", "data", "analysis"],
-      "dependencies": [0],
-      "complexity": {
-        "score": 5,
-        "confidence": 0.86,
-        "reasoning": "Schema design depends on project setup and requires moderate reasoning.",
-        "estimatedTokens": { "min": 220, "max": 520, "expected": 360 }
-      }
-    }
-  ]
-}
-
-Example 3:
-{
-  "subTasks": [
-    {
-      "description": "Review the failing test output and identify the component causing the regression.",
-      "capabilityTags": ["analysis", "reasoning", "read-only"],
-      "dependencies": [],
-      "complexity": {
-        "score": 3,
-        "confidence": 0.91,
-        "reasoning": "This is a bounded debugging analysis task.",
-        "estimatedTokens": { "min": 100, "max": 260, "expected": 160 }
-      }
-    },
-    {
-      "description": "Implement the code fix in the affected component and update any related logic.",
-      "capabilityTags": ["code-generation", "write", "execution"],
-      "dependencies": [0],
-      "complexity": {
-        "score": 4,
-        "confidence": 0.84,
-        "reasoning": "The fix requires code changes informed by the prior diagnosis.",
-        "estimatedTokens": { "min": 160, "max": 380, "expected": 250 }
-      }
-    },
-    {
-      "description": "Run the relevant tests and summarize whether the regression is resolved.",
-      "capabilityTags": ["execution", "analysis", "summarization"],
-      "dependencies": [1],
-      "complexity": {
-        "score": 3,
-        "confidence": 0.9,
-        "reasoning": "Verification is procedural and depends on the implemented fix.",
-        "estimatedTokens": { "min": 90, "max": 220, "expected": 140 }
-      }
-    }
-  ]
-}
+- Before replying verify the generated content. 
+- **DO NOT REPEAT the json**
 
 Return exactly:
 {
   "subTasks": [
     {
+      "id": number,
       "description": string,
       "capabilityTags": string[],
       "dependencies": number[],

@@ -246,6 +246,14 @@ export const apiClient = {
     return mapTaskRecordToDetails(response.data);
   },
 
+  async resubmitTask(id: string): Promise<TaskDetails> {
+    const response = await requestJson<ApiEnvelope<TaskRecord>>(`${API_ENDPOINTS.tasks}/${id}/resubmit`, {
+      method: 'POST',
+      headers: defaultHeaders,
+    });
+    return mapTaskRecordToDetails(response.data);
+  },
+
   async listWorkflows(): Promise<WorkflowDefinitionRecord[]> {
     const response = await requestJson<ApiListEnvelope<WorkflowDefinitionRecord>>(API_ENDPOINTS.workflows);
     return response.data;

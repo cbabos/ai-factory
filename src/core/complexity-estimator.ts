@@ -39,7 +39,7 @@ export class ComplexityEstimator
         provider: this.estimatorProvider,
         systemPrompt: SYSTEM_PROMPT,
         temperature: 0.1,
-        maxTokens: 600,
+        maxTokens: 32768,
         responseFormat: "json",
       });
       conversation.push(
@@ -72,9 +72,10 @@ export class ComplexityEstimator
 
   private parseStructured(content: string): ComplexityOutput {
     const sanitizedContent = this.stripJsonFence(content);
+    const firstJson = this.extractFirstJsonObject(sanitizedContent);
     let parsed: unknown;
     try {
-      parsed = JSON.parse(sanitizedContent) as unknown;
+      parsed = JSON.parse(firstJson) as unknown;
     } catch (err) {
       throw new Error(`Estimator returned invalid JSON: ${err instanceof Error ? err.message : String(err)}. Content: ${content.slice(0, 500)}`);
     }
@@ -83,6 +84,57 @@ export class ComplexityEstimator
     } catch (err) {
       throw new Error(`Estimator returned invalid structure: ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+
+  private extractFirstJsonObject(content: string): string {
+    const trimmed = content.trim();
+    // Some local/quantized models stream or repeat the JSON object multiple
+    // times inside a single completion. Take the first complete top-level
+    // value (object or array) and ignore trailing repetitions.
+    let objectDepth = 0;
+    let arrayDepth = 0;
+    let inString = false;
+    let escape = false;
+    let firstValueStart = -1;
+    for (let i = 0; i < trimmed.length; i += 1) {
+      const ch = trimmed[i];
+      if (inString) {
+        if (escape) {
+          escape = false;
+        } else if (ch === "\\") {
+          escape = true;
+        } else if (ch === '"') {
+          inString = false;
+        }
+        continue;
+      }
+      if (ch === '"') {
+        inString = true;
+        continue;
+      }
+      if (ch === "{") {
+        if (objectDepth === 0 && arrayDepth === 0) {
+          firstValueStart = i;
+        }
+        objectDepth += 1;
+      } else if (ch === "}") {
+        objectDepth -= 1;
+        if (objectDepth === 0 && arrayDepth === 0 && firstValueStart !== -1) {
+          return trimmed.slice(firstValueStart, i + 1);
+        }
+      } else if (ch === "[") {
+        if (objectDepth === 0 && arrayDepth === 0) {
+          firstValueStart = i;
+        }
+        arrayDepth += 1;
+      } else if (ch === "]") {
+        arrayDepth -= 1;
+        if (objectDepth === 0 && arrayDepth === 0 && firstValueStart !== -1) {
+          return trimmed.slice(firstValueStart, i + 1);
+        }
+      }
+    }
+    return trimmed;
   }
 
   private buildPrompt(task: Task): string {

@@ -111,35 +111,35 @@ function makeConfig(): FactoryConfig {
     ],
     agents: [
       {
-        id: "search-agent",
+        id: "custom-search",
         tags: ["search", "codebase", "read-only"],
         complexityRange: [1, 4],
         timeoutMs: 30000,
         maxRetries: 2,
       },
       {
-        id: "analysis-agent",
+        id: "custom-analysis",
         tags: ["analysis", "reasoning"],
         complexityRange: [3, 7],
         timeoutMs: 60000,
         maxRetries: 2,
       },
       {
-        id: "summarizer-agent",
+        id: "custom-summary",
         tags: ["summarization", "synthesis"],
         complexityRange: [1, 5],
         timeoutMs: 30000,
         maxRetries: 1,
       },
       {
-        id: "executor-agent",
+        id: "custom-executor",
         tags: ["execution", "code-generation", "write"],
         complexityRange: [3, 8],
         timeoutMs: 120000,
         maxRetries: 1,
       },
       {
-        id: "file-io-agent",
+        id: "custom-file-io",
         tags: ["file-io", "read-only", "write"],
         complexityRange: [1, 3],
         timeoutMs: 15000,
@@ -447,4 +447,52 @@ describe("AIFactory integration", () => {
 
     expect(completed.length).toBeGreaterThanOrEqual(1);
   });
+
+  it("resubmits a failed task as a new pending task", async () => {
+    const taskRepository = new InMemoryTaskRepository();
+    const factory = new AIFactory({
+      config: {},
+      secrets: makeSecrets(),
+      callers: new Map([["openai", makeFakeCaller()]]),
+      logger: new NoopLogger(),
+      taskRepository,
+    });
+
+    const original = await factory.submitApiTask({
+      description: "resubmit candidate",
+      priority: "high",
+      context: { repo: "ai-factory" },
+      workflowId: "custom-workflow",
+      workflowVersion: 2,
+    });
+
+    await taskRepository.setStatus(original.id, "failed");
+    const resubmitted = await factory.resubmitTask(original.id);
+
+    expect(resubmitted.id).not.toBe(original.id);
+    expect(resubmitted.description).toBe(original.description);
+    expect(resubmitted.priority).toBe("high");
+    expect(resubmitted.context.repo).toBe("ai-factory");
+    expect(resubmitted.context.resubmittedFrom).toBe(original.id);
+    expect(resubmitted.workflow?.workflowId).toBe("custom-workflow");
+    expect(resubmitted.workflow?.workflowVersion).toBe(2);
+
+    const record = await taskRepository.get(resubmitted.id);
+    expect(record?.status).toBe("pending");
+  });
+
+  it("rejects resubmitting a task that is not failed or cancelled", async () => {
+    const taskRepository = new InMemoryTaskRepository();
+    const factory = new AIFactory({
+      config: {},
+      secrets: makeSecrets(),
+      callers: new Map([["openai", makeFakeCaller()]]),
+      logger: new NoopLogger(),
+      taskRepository,
+    });
+
+    const original = await factory.submitApiTask({ description: "still running" });
+    await expect(factory.resubmitTask(original.id)).rejects.toThrow("cannot be resubmitted");
+  });
+
 });

@@ -13,7 +13,6 @@ import {
 } from "./core/sqlite-workflow-repository.js";
 import { ToolRegistry, createFileTools, RunShellCommandTool } from "./tools/index.js";
 import { SQLiteConfigStore } from "./core/sqlite-config-store.js";
-import { seedStarterWorkflows } from "./core/starter-workflows.js";
 import { AIFactory } from "./factory.js";
 import {
   EmailAdapter,
@@ -50,7 +49,6 @@ async function main() {
   const humanTaskRepository = new SQLiteHumanTaskRepository("./ai-factory.db");
   const artifactRepository = new SQLiteWorkflowArtifactRepository("./ai-factory.db");
   const settingsStore = new SQLiteConfigStore("./ai-factory.db");
-  await seedStarterWorkflows(workflowRepository);
   
   const factory = new AIFactory({ 
     config, 

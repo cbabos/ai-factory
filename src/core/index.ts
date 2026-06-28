@@ -34,7 +34,6 @@ export * from "./sqlite-task-repository.js";
 export * from "./workflow-repository.js";
 export * from "./sqlite-workflow-repository.js";
 export * from "./workflow-engine.js";
-export * from "./starter-workflows.js";
 export * from "./sqlite-config-store.js";
 export * from "./agent-store.js";
 export * from "./model-store.js";

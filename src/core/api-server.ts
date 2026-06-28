@@ -47,6 +47,7 @@ import {
 import {
   listTasks,
   createTask,
+  resubmitTask,
   getTask,
   getTaskConversation,
 } from "./api-handlers/tasks.js";
@@ -196,6 +197,7 @@ export class ApiServer {
   private setupTaskRoutes(router: Router): void {
     router.get("/tasks", this.wrapAsync(listTasks));
     router.post("/tasks", this.wrapAsync(createTask));
+    router.post("/tasks/:id/resubmit", this.wrapAsync(resubmitTask));
     router.get("/tasks/:id", this.wrapAsync(getTask));
     router.get("/tasks/:id/conversation", this.wrapAsync(getTaskConversation));
   }

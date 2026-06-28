@@ -97,13 +97,13 @@ describe("WorkflowEngine", () => {
     const workflowRepo = new InMemoryWorkflowRepository();
     const runRepo = new InMemoryWorkflowRunRepository();
     const humanRepo = new InMemoryHumanTaskRepository();
-    const agent = makeAgent("analysis-agent");
+    const agent = makeAgent("test-agent");
     await workflowRepo.save(makeWorkflow([
       {
         id: "draft",
         name: "Draft requirements",
         type: "agent",
-        agentId: "analysis-agent",
+        agentId: "test-agent",
         instruction: "Draft requirements for {{task.description}}",
         outputKey: "requirements",
       },
@@ -120,7 +120,7 @@ describe("WorkflowEngine", () => {
       workflowRepository: workflowRepo,
       workflowRunRepository: runRepo,
       humanTaskRepository: humanRepo,
-      agents: new Map([["analysis-agent", agent]]),
+      agents: new Map([["test-agent", agent]]),
       modelSelector: makeSelector(),
       budgetTracker,
       eventBus,
@@ -181,7 +181,7 @@ describe("WorkflowEngine", () => {
     const runRepo = new InMemoryWorkflowRunRepository();
     const humanRepo = new InMemoryHumanTaskRepository();
     const artifactRepo = new InMemoryWorkflowArtifactRepository();
-    const agent = makeAgent("analysis-agent");
+    const agent = makeAgent("test-agent");
     vi.mocked(agent.execute).mockResolvedValueOnce({
       subTaskId: "sub-1",
       output: {
@@ -216,7 +216,7 @@ describe("WorkflowEngine", () => {
         id: "draft",
         name: "Draft requirements",
         type: "agent",
-        agentId: "analysis-agent",
+        agentId: "test-agent",
         instruction: "Draft requirements for {{task.description}}",
         outputKey: "draftRequirements",
       },
@@ -242,7 +242,7 @@ describe("WorkflowEngine", () => {
       workflowRunRepository: runRepo,
       humanTaskRepository: humanRepo,
       artifactRepository: artifactRepo,
-      agents: new Map([["analysis-agent", agent]]),
+      agents: new Map([["test-agent", agent]]),
       modelSelector: makeSelector(),
       budgetTracker,
       eventBus,
@@ -262,7 +262,7 @@ describe("WorkflowEngine", () => {
     const workflowRepo = new InMemoryWorkflowRepository();
     const runRepo = new InMemoryWorkflowRunRepository();
     const humanRepo = new InMemoryHumanTaskRepository();
-    const agent = makeAgent("analysis-agent");
+    const agent = makeAgent("test-agent");
     await workflowRepo.save(makeWorkflow([
       {
         id: "clarify",
@@ -275,7 +275,7 @@ describe("WorkflowEngine", () => {
         id: "draft",
         name: "Draft requirements",
         type: "agent",
-        agentId: "analysis-agent",
+        agentId: "test-agent",
         instruction: "Draft requirements for {{task.description}} in {{workflow.context}}",
         outputKey: "requirements",
         dependsOn: ["clarify"],
@@ -292,7 +292,7 @@ describe("WorkflowEngine", () => {
       workflowRepository: workflowRepo,
       workflowRunRepository: runRepo,
       humanTaskRepository: humanRepo,
-      agents: new Map([["analysis-agent", agent]]),
+      agents: new Map([["test-agent", agent]]),
       modelSelector: makeSelector(),
       budgetTracker,
       eventBus,
@@ -314,14 +314,14 @@ describe("WorkflowEngine", () => {
     const workflowRepo = new InMemoryWorkflowRepository();
     const runRepo = new InMemoryWorkflowRunRepository();
     const humanRepo = new InMemoryHumanTaskRepository();
-    const agent = makeAgent("analysis-agent");
+    const agent = makeAgent("test-agent");
 
     await workflowRepo.save(makeWorkflow([
       {
         id: "draft",
         name: "Draft requirements",
         type: "agent",
-        agentId: "analysis-agent",
+        agentId: "test-agent",
         instruction: "Draft requirements for {{task.description}} using {{workflow.context}}",
         outputKey: "requirements",
       },
@@ -347,7 +347,7 @@ describe("WorkflowEngine", () => {
       workflowRepository: workflowRepo,
       workflowRunRepository: runRepo,
       humanTaskRepository: humanRepo,
-      agents: new Map([["analysis-agent", agent]]),
+      agents: new Map([["test-agent", agent]]),
       modelSelector: makeSelector(),
       budgetTracker,
       eventBus,
@@ -383,14 +383,14 @@ describe("WorkflowEngine", () => {
     const workflowRepo = new InMemoryWorkflowRepository();
     const runRepo = new InMemoryWorkflowRunRepository();
     const humanRepo = new InMemoryHumanTaskRepository();
-    const agent = makeAgent("analysis-agent");
+    const agent = makeAgent("test-agent");
 
     await workflowRepo.save(makeWorkflow([
       {
         id: "draft",
         name: "Draft requirements",
         type: "agent",
-        agentId: "analysis-agent",
+        agentId: "test-agent",
         instruction: "Draft requirements for {{task.description}}",
         outputKey: "requirements",
       },
@@ -415,7 +415,7 @@ describe("WorkflowEngine", () => {
       workflowRepository: workflowRepo,
       workflowRunRepository: runRepo,
       humanTaskRepository: humanRepo,
-      agents: new Map([["analysis-agent", agent]]),
+      agents: new Map([["test-agent", agent]]),
       modelSelector: makeSelector(),
       budgetTracker,
       eventBus,
@@ -444,7 +444,7 @@ describe("WorkflowEngine", () => {
     const humanRepo = new InMemoryHumanTaskRepository();
     const artifactRepo = new InMemoryWorkflowArtifactRepository();
     const dir = mkdtempSync(join(tmpdir(), "workflow-artifacts-"));
-    const agent = makeAgent("analysis-agent");
+    const agent = makeAgent("test-agent");
     vi.mocked(agent.execute).mockResolvedValueOnce({
       subTaskId: "sub-1",
       output: {
@@ -470,7 +470,7 @@ describe("WorkflowEngine", () => {
         id: "draft",
         name: "Draft requirements",
         type: "agent",
-        agentId: "analysis-agent",
+        agentId: "test-agent",
         instruction: "Draft requirements for {{task.description}}",
         outputKey: "requirements",
       },
@@ -488,7 +488,7 @@ describe("WorkflowEngine", () => {
       humanTaskRepository: humanRepo,
       artifactRepository: artifactRepo,
       artifactRootDir: dir,
-      agents: new Map([["analysis-agent", agent]]),
+      agents: new Map([["test-agent", agent]]),
       modelSelector: makeSelector(),
       budgetTracker,
       eventBus,

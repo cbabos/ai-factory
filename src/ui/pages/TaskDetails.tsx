@@ -51,6 +51,18 @@ const TaskDetailsPage: React.FC = () => {
     };
   }, [loadTask, taskId]);
 
+  const handleResubmit = async () => {
+    if (!task) {
+      return;
+    }
+    try {
+      const newTask = await apiClient.resubmitTask(task.id);
+      navigate(`/tasks/${newTask.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resubmit task');
+    }
+  };
+
   if (loading) {
     return <Panel title="Task Details">Loading task thread...</Panel>;
   }
@@ -79,6 +91,16 @@ const TaskDetailsPage: React.FC = () => {
         >
           Back to Tasks
         </button>
+        {(task.status === 'failed' || task.status === 'cancelled') ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={handleResubmit}
+          >
+            Resubmit
+          </Button>
+        ) : null}
       </div>
 
       <Panel title="Thread Summary" cyber>

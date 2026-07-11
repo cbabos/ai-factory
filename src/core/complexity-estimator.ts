@@ -1,6 +1,7 @@
 import type { Task, ComplexityScore, TokenEstimate, ConversationTurn } from "./types.js";
 import type { IComplexityEstimator, ILLMCaller, LLMCallResult, EstimationResult } from "./interfaces.js";
 import { PipelineStep } from "./pipeline-step.js";
+import { COMPLEXITY_ESTIMATOR_SYSTEM_PROMPT, buildComplexityEstimatorUserPrompt } from "./prompts.js";
 
 interface ComplexityOutput {
   score: number;
@@ -30,16 +31,16 @@ export class ComplexityEstimator
     const span = this.startSpan("estimate");
     const prompt = this.buildPrompt(task);
     const conversation: ConversationTurn[] = [
-      { role: "system", content: SYSTEM_PROMPT, timestamp: Date.now() },
+      { role: "system", content: COMPLEXITY_ESTIMATOR_SYSTEM_PROMPT, timestamp: Date.now() },
     ];
 
     try {
       const result: LLMCallResult = await this.llmCaller.call(prompt, {
         model: this.estimatorModel,
         provider: this.estimatorProvider,
-        systemPrompt: SYSTEM_PROMPT,
+        systemPrompt: COMPLEXITY_ESTIMATOR_SYSTEM_PROMPT,
         temperature: 0.1,
-        maxTokens: 32768,
+        maxTokens: 16384,
         responseFormat: "json",
       });
       conversation.push(
@@ -138,31 +139,7 @@ export class ComplexityEstimator
   }
 
   private buildPrompt(task: Task): string {
-    return `Analyze the complexity of this task and return a JSON object.
-
-Task description: ${task.description}
-Priority: ${task.priority}
-Context: ${JSON.stringify(task.context, null, 2)}
-Constraints: ${JSON.stringify(task.constraints ?? {}, null, 2)}
-
-Respond with exactly this JSON structure:
-{
-  "score": number,        // 1-10, where 1 is trivial and 10 is extremely complex
-  "confidence": number,   // 0.0-1.0
-  "reasoning": string,    // brief explanation
-  "estimatedTokens": {
-    "min": number,
-    "max": number,
-    "expected": number
-  }
-}
-
-Guidelines for score:
-1: direct lookup or single-line answer
-3: simple transformation or short explanation
-5: moderate reasoning with multiple steps
-7: research, analysis, or multi-file coordination
-10: complex architecture, novel reasoning, or large-scale generation`;
+    return buildComplexityEstimatorUserPrompt(task);
   }
 
   private normalizeEstimate(est: TokenEstimate): TokenEstimate {
@@ -232,4 +209,3 @@ Guidelines for score:
   }
 }
 
-const SYSTEM_PROMPT = `You are a task complexity analyzer. Score tasks from 1 (trivial) to 10 (extremely complex). Consider ambiguity, domain knowledge, number of steps, need for external data, and reasoning depth. Be conservative — prefer slightly higher scores when uncertain. Always respond with valid JSON only.`;

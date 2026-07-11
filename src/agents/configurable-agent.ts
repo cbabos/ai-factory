@@ -2,6 +2,7 @@ import { Agent } from "../core/agent.js";
 import type { IAgent, ILLMCaller } from "../core/interfaces.js";
 import type { AgentManifest, SubTask } from "../core/types.js";
 import type { IToolRegistry } from "../tools/interfaces.js";
+import { CONFIGURABLE_AGENT_DEFAULT_BEHAVIOR, CONFIGURABLE_AGENT_OUTPUT_CONTRACT_PREFIX, CONFIGURABLE_AGENT_TOOL_POLICY_PREFIX, CONFIGURABLE_AGENT_NOTES_PREFIX } from "../core/prompts.js";
 
 interface ConfigurableAgentMetadata {
   systemPrompt?: unknown;
@@ -88,7 +89,7 @@ export class ConfigurableAgent extends Agent implements IAgent {
 
     const outputContract = getString(this.metadata.outputContract);
     if (outputContract) {
-      sections.push(`Output contract:\n${outputContract}`);
+      sections.push(`${CONFIGURABLE_AGENT_OUTPUT_CONTRACT_PREFIX}\n${outputContract}`);
     }
 
     return sections.join("\n\n");
@@ -104,17 +105,17 @@ export class ConfigurableAgent extends Agent implements IAgent {
       const intro = this.description
         ? `You are ${this.name}. ${this.description}`
         : `You are ${this.name}.`;
-      sections.push(`${intro} Complete the task carefully and directly.`);
+      sections.push(`${intro} ${CONFIGURABLE_AGENT_DEFAULT_BEHAVIOR}`);
     }
 
     const toolPolicy = getString(this.metadata.toolPolicy);
     if (toolPolicy) {
-      sections.push(`Tool policy:\n${toolPolicy}`);
+      sections.push(`${CONFIGURABLE_AGENT_TOOL_POLICY_PREFIX}\n${toolPolicy}`);
     }
 
     const notes = getString(this.metadata.notes);
     if (notes) {
-      sections.push(`Notes:\n${notes}`);
+      sections.push(`${CONFIGURABLE_AGENT_NOTES_PREFIX}\n${notes}`);
     }
 
     return sections.join("\n\n");

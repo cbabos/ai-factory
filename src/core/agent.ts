@@ -1,7 +1,8 @@
 import type { AgentManifest, SubTask, TaskResult, ModelChoice, TokenUsage, ConversationTurn } from "./types.js";
 import type { IAgent, ILLMCaller, LLMCallOptions } from "./interfaces.js";
-import type { IToolRegistry, ToolCall, ToolResult } from "../tools/interfaces.js";
+import type { IToolRegistry, ToolCall } from "../tools/interfaces.js";
 import { PipelineStep } from "./pipeline-step.js";
+import { buildAgentToolSystemPrompt, buildAgentToolLoopNoRepeatPrompt, buildAgentToolLoopContinuePrompt } from "./prompts.js";
 
 const DEFAULT_TOOL_ITERATIONS = 5;
 
@@ -61,33 +62,7 @@ function parseToolCalls(content: string): ToolCall[] {
   return calls;
 }
 
-function formatToolResults(results: ToolResult[]): string {
-  return results
-    .map((result) => {
-      const errorPart = result.error ? `Error: ${result.error}\n` : "";
-      return `\u003ctool_result name="${result.name}" success="${result.success}"\u003e\n${JSON.stringify(result.output)}\n${errorPart}\u003c/tool_result\u003e`;
-    })
-    .join("\n");
-}
 
-function buildToolsSystemPrompt(tools?: IToolRegistry): string {
-  if (!tools || tools.list().length === 0) return "";
-  const defs = tools
-    .list()
-    .map((tool) => {
-      const params = tool.parameters
-        .map((p) => `- ${p.name}${p.required ? "" : "?"}: ${p.type} — ${p.description}`)
-        .join("\n");
-      const exampleArgs: Record<string, string> = {};
-      for (const p of tool.parameters) {
-        exampleArgs[p.name] = `\u003c${p.type}\u003e`;
-      }
-      const example = `call:tool:${tool.name}\n${JSON.stringify(exampleArgs, null, 2)}`;
-      return `### ${tool.name}\n${tool.description}\nParameters:\n${params || "(none)"}\n\nCall it exactly like this:\n${example}`;
-    })
-    .join("\n\n");
-  return `\n\nYou have access to the following tools. To call a tool, output ONLY a block starting with \`call:tool:<name>\` followed by a JSON object on the next lines. Do not wrap it in XML tags. Do not explain the tool call. When you have enough information, provide a final answer with no tool block.\n\n${defs}`;
-}
 
 export abstract class Agent
   extends PipelineStep<SubTask, TaskResult>
@@ -124,7 +99,7 @@ export abstract class Agent
           try {
             const basePrompt = this.buildPrompt(subTask);
             const baseSystemPrompt = this.buildSystemPrompt(subTask);
-            const toolsPrompt = buildToolsSystemPrompt(this.tools);
+            const toolsPrompt = buildAgentToolSystemPrompt(this.tools);
             const systemPrompt = toolsPrompt
               ? `${baseSystemPrompt}${toolsPrompt}`
               : baseSystemPrompt;
@@ -170,11 +145,11 @@ export abstract class Agent
               });
 
               if (allRepeated && iteration + 1 < maxIterations) {
-                const outputPath = subTask.context?.outputPath as string | undefined;
-                const writeHint = outputPath
-                  ? ` The task requires writing the result to ${outputPath}. Call writeFile with that path and the content you already have.`
-                  : " Provide a final answer with no tool block.";
-                prompt = `${basePrompt}\n\nYou already executed the following tool calls in this conversation; do not repeat them:\n${toolCalls.map((c) => `- ${c.name}: ${JSON.stringify(c.arguments)}`).join("\n")}\n${writeHint}`;
+                prompt = buildAgentToolLoopNoRepeatPrompt(
+                  basePrompt,
+                  toolCalls.map((c) => ({ name: c.name, arguments: c.arguments })),
+                  subTask.context?.outputPath as string | undefined,
+                );
                 iteration++;
                 continue;
               }
@@ -186,7 +161,7 @@ export abstract class Agent
               for (const call of toolCalls) {
                 executedToolKeys.add(`${call.name}:${JSON.stringify(call.arguments)}`);
               }
-              prompt = `${basePrompt}\n\nYour previous response:\n${lastContent}\n\n${formatToolResults(toolResults)}\n\nContinue or provide a final answer. If a tool failed or does not exist, do not call it again; answer based on what you already know.`;
+              prompt = buildAgentToolLoopContinuePrompt(basePrompt, lastContent, toolResults);
               iteration++;
             }
 

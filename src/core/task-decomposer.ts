@@ -1,6 +1,7 @@
 import type { Task, ComplexityScore, TokenEstimate, ConversationTurn } from "./types.js";
 import type { ITaskDecomposer, ILLMCaller, DecompositionResult, LLMCallOptions } from "./interfaces.js";
 import { getDefaultCapabilityTagIds } from "./tag-vocabulary.js";
+import { TASK_DECOMPOSER_SYSTEM_PROMPT, TASK_DECOMPOSER_REPAIR_SYSTEM_PROMPT, buildTaskDecomposerUserPrompt, buildTaskDecomposerRepairPrompt } from "./prompts.js";
 
 interface DecomposedSubTask {
   description: string;
@@ -40,7 +41,7 @@ export class TaskDecomposer implements ITaskDecomposer {
   async decompose(task: Task, score: ComplexityScore): Promise<DecompositionResult> {
     const prompt = this.buildPrompt(task, score);
     const conversation: ConversationTurn[] = [
-      { role: "system", content: SYSTEM_PROMPT, timestamp: Date.now() },
+      { role: "system", content: TASK_DECOMPOSER_SYSTEM_PROMPT, timestamp: Date.now() },
     ];
 
     try {
@@ -79,7 +80,7 @@ export class TaskDecomposer implements ITaskDecomposer {
       const llmCallOptions : LLMCallOptions = {
         model: this.decomposerModel,
         provider: this.decomposerProvider,
-        systemPrompt: SYSTEM_PROMPT,
+        systemPrompt: TASK_DECOMPOSER_SYSTEM_PROMPT,
         temperature: 0.2,
         maxTokens: 2000, // FIXME: this should be either configurable or by default extended
         responseFormat: "json",
@@ -129,7 +130,7 @@ export class TaskDecomposer implements ITaskDecomposer {
     const result = await this.llmCaller.call(prompt, {
       model: this.decomposerModel,
       provider: this.decomposerProvider,
-      systemPrompt: REPAIR_SYSTEM_PROMPT,
+      systemPrompt: TASK_DECOMPOSER_REPAIR_SYSTEM_PROMPT,
       temperature: 0,
       maxTokens: 2000,
       responseFormat: "json",
@@ -212,66 +213,7 @@ export class TaskDecomposer implements ITaskDecomposer {
   }
 
   private buildPrompt(task: Task, score: ComplexityScore): string {
-    const availableTags = this.resolveCapabilityTags();
-    return `Decompose this complex task into smaller, independently executable sub-tasks.
-
-You must follow the output schema exactly. Return valid JSON only.
-
-Original task: ${task.description}
-Parent complexity score: ${score.score}/10
-Reasoning: ${score.reasoning}
-Priority: ${task.priority}
-Context: ${JSON.stringify(task.context, null, 2)}
-Constraints: ${JSON.stringify(task.constraints ?? {}, null, 2)}
-
-Rules:
-- Each sub-task must be simple enough for a single-purpose agent.
-- Use capability tags from this curated set: [${availableTags.join(", ")}].
-- Prefer the smallest accurate set of tags for each sub-task instead of broad tag stuffing.
-- dependencies are 0-based indices into the subTasks array. Sub-task 2 depends on sub-task 0 means dependencies: [0].
-- Each sub-task gets its own complexity score (must be lower than the parent's ${score.score}).
-- Aim for 2-6 sub-tasks.
-- estimatedTokens: { min, max, expected }
-- The top-level JSON value must be an object, not an array.
-- The top-level object must contain exactly one key: "subTasks".
-- "subTasks" must be an array of objects.
-- Each sub-task object must contain exactly these keys:
-  "description", "capabilityTags", "dependencies", "complexity"
-- Do not add extra keys such as "title", "name", "description_code", "notes", or "metadata".
-- "description" must be a non-empty string.
-- "capabilityTags" must be an array using only values from the curated set above.
-- "dependencies" must be an array of integers referencing **earlier sub-task IDs only**.
-- "complexity" must contain exactly these keys:
-  "score", "confidence", "reasoning", "estimatedTokens"
-- Do not rename fields. Use "confidence", never variants like "conf", "rating", or numeric keys such as "5".
-- "score" must be a number.
-- "confidence" must be a number between 0 and 1.
-- "reasoning" must be a string.
-- "estimatedTokens" must contain exactly these numeric keys:
-  "min", "max", "expected"
-- Do not wrap the response in markdown fences.
-- Do not include commentary, explanations, prose, headings, or text before or after the JSON.
-- If you are uncertain, still output the exact schema with best-effort values instead of inventing new fields.
-- Before replying verify the generated content. 
-- **DO NOT REPEAT the json**
-
-Return exactly:
-{
-  "subTasks": [
-    {
-      "id": number,
-      "description": string,
-      "capabilityTags": string[],
-      "dependencies": number[],
-      "complexity": {
-        "score": number,
-        "confidence": number,
-        "reasoning": string,
-        "estimatedTokens": { "min": number, "max": number, "expected": number }
-      }
-    }
-  ]
-}`;
+    return buildTaskDecomposerUserPrompt(task, score, this.resolveCapabilityTags());
   }
 
   private resolveCapabilityTags(): string[] {
@@ -290,31 +232,7 @@ Return exactly:
   }
 
   private buildRepairPrompt(content: string): string {
-    return `Repair the following malformed JSON into valid JSON.
-
-Rules:
-- Return valid JSON only.
-- Preserve the original intent and fields.
-- Do not add markdown fences or explanations.
-- Keep the same schema:
-{
-  "subTasks": [
-    {
-      "description": string,
-      "capabilityTags": string[],
-      "dependencies": number[],
-      "complexity": {
-        "score": number,
-        "confidence": number,
-        "reasoning": string,
-        "estimatedTokens": { "min": number, "max": number, "expected": number }
-      }
-    }
-  ]
-}
-
-Malformed JSON:
-${content}`;
+    return buildTaskDecomposerRepairPrompt(content);
   }
 
   private isRecoverableParseError(err: Error): boolean {
@@ -416,5 +334,3 @@ ${content}`;
   }
 }
 
-const SYSTEM_PROMPT = `You are a task decomposition specialist. Break complex tasks into the smallest possible independent sub-tasks. Each sub-task should be simple enough for a single-purpose agent. Prefer more, simpler sub-tasks over fewer, complex ones. You must follow the requested schema exactly. Return a single valid JSON object only, with no markdown fences, no commentary, no extra keys, and no alternative field names.`;
-const REPAIR_SYSTEM_PROMPT = `You repair malformed JSON. Return valid JSON only, preserve the intended structure and values, and never include markdown fences or commentary.`;
